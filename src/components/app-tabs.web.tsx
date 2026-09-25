@@ -15,6 +15,8 @@ import { ThemedView } from './themed-view';
 
 import { Colors, MaxContentWidth, Spacing } from '@/constants/theme';
 
+import { Ref } from 'react';
+
 export default function AppTabs() {
   return (
     <Tabs>
@@ -24,14 +26,16 @@ export default function AppTabs() {
           <TabTrigger name="home" href="/" asChild>
             <TabButton>Home</TabButton>
           </TabTrigger>
-          <TabTrigger name="explore" href="/explore" asChild>
-            <TabButton>Explore</TabButton>
-          </TabTrigger>
         </CustomTabList>
       </TabList>
     </Tabs>
   );
 }
+
+
+type TabButtonProps = TabTriggerSlotProps & {
+  ref: Ref<View>;
+};
 
 export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps) {
   return (

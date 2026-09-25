@@ -3,5 +3,30 @@
     "source.fixAll": "explicit",
     "source.organizeImports": "explicit",
     "source.sortMembers": "explicit"
-  }
+  },
+  "workbench.colorCustomizations": {
+    "[One Dark Pro Darker]": {
+      "titleBar.activeBackground": "#4F1720",
+      "titleBar.inactiveBackground": "#351016",
+      "statusBar.background": "#4F1720",
+      "statusBar.noFolderBackground": "#4F1720",
+      "statusBar.debuggingBackground": "#681F2A",
+      "activityBar.background": "#3F121A",
+      "activityBar.activeBackground": "#5B1B25",
+      "activityBarBadge.background": "#722634",
+      "sideBarSectionHeader.background": "#3F121A"
+    },
+    "activityBar.background": "#9B4207",
+    "titleBar.activeBackground": "#D95D0A",
+    "titleBar.activeForeground": "#FFF8F4",
+    "titleBar.inactiveBackground": "#9B4207",
+    "titleBar.inactiveForeground": "#FFF8F4",
+    "statusBar.background": "#9B4207",
+    "statusBar.foreground": "#FFF8F4",
+    "statusBar.debuggingBackground": "#9B4207",
+    "statusBar.debuggingForeground": "#FFF8F4",
+    "statusBar.noFolderBackground": "#9B4207",
+    "statusBar.noFolderForeground": "#FFF8F4"
+  },
+  "js/ts.tsdk.path": "node_modules\\typescript\\lib"
 }
