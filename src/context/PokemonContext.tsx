@@ -8,7 +8,6 @@ export type Pokemon = {
   name: string;
   height: number;
   weight: number;
-
   species: string;
 
   sprites: {
@@ -49,7 +48,7 @@ const PokemonContext = createContext<PokemonContextType | undefined>(
 // --------------------------------------------------
 
 // Cambiar IP_DE_MI_PC por la IP local de tu computador.
-const API_URL = "http://192.168.0.2:3000";
+const API_URL = "http://172.16.3.0:3000";
 
 // --------------------------------------------------
 // PROVIDER

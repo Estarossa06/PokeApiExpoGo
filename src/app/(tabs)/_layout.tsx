@@ -39,7 +39,7 @@ export default function TabLayout() {
             headerShown: false,
             tabBarIcon: ({ color, focused }) => (
               <Ionicons
-                name={focused ? 'image' : 'home-outline'}
+                name={focused ? 'image' : 'image'}
                 color={color}
                 size={24}
               />
@@ -58,6 +58,34 @@ export default function TabLayout() {
                 color={color}
                 size={24}
               />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="character"
+          options={{
+            title: "Character",
+            headerShown: false,
+            tabBarIcon: ({ color }) => (
+             <Ionicons
+               name="person-circle-outline"
+               size={28}
+               color={color}
+             />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="transformations"
+          options={{
+            title: "Transformations",
+            headerShown: false,
+            tabBarIcon: ({ color }) => (
+             <Ionicons
+               name="flash-outline"
+               size={28}
+               color={color}
+             />
             ),
           }}
         />
