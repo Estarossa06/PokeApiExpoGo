@@ -1,0 +1,7 @@
+# dependencias 
+
+flask
+pymongo
+python-dotenv
+flasgger
+gunicorn
