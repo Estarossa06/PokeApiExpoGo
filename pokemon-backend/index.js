@@ -1,12 +1,66 @@
 import express from 'express';
+import cors from 'cors';
+import pg from 'pg';
+import dotenv from 'dotenv';
+import swaggerUi from 'swagger-ui-express';
+import swaggerJsdoc from 'swagger-jsdoc';
 
-const app = express();
+dotenv.config();
+
+const { Pool } = pg;
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  }
+});
+
+const app = express(); 
+
+const swaggerOptions = {
+  definition: {
+    openapi: '3.0.0',
+    info: {
+      title: 'Pokémon API',
+      version: '1.0.0',
+      description: 'Microservicio de Pokémon conectado a PostgreSQL'
+    }
+  },
+  apis: ['./index.js']
+};
+
+const swaggerSpec = swaggerJsdoc(swaggerOptions);
+
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 const PORT = 3000;
 
+app.use(cors());
 app.use(express.json());
 
-app.get('/api/pokemon/:name', async (req, res) => { //endpoint conexion e informacion
+/**
+ * @swagger
+ * /api/pokemon/{name}:
+ *   get:
+ *     summary: Obtener un Pokémon por nombre
+ *     parameters:
+ *       - in: path
+ *         name: name
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Nombre del Pokémon
+ *     responses:
+ *       200:
+ *         description: Pokémon encontrado
+ *       404:
+ *         description: Pokémon no encontrado
+ *       500:
+ *         description: Error del servidor
+ */
+
+app.get('/api/pokemon/:name', async (req, res) => { 
   try {
     const { name } = req.params;
 
@@ -20,57 +74,41 @@ app.get('/api/pokemon/:name', async (req, res) => { //endpoint conexion e inform
 
     console.log(`🔍 Buscando a: ${cleanName}`);
 
-    // Consumimos PokeAPI utilizando fetch
-    const response = await fetch(
-      `https://pokeapi.co/api/v2/pokemon/${cleanName}`
-    );
+    // Consumimos PokeAPI utilizando fetch 
+    //endpoint conexion e informacion
+  const result = await pool.query(
+  'SELECT id, name, height, weight, image FROM pokemons WHERE LOWER(name) = LOWER($1)',
+  [cleanName]
+   );
 
-    // Si el Pokémon no existe
-    if (response.status === 404) {
-      return res
-        .status(404)
-        .json({ error: 'Pokémon no encontrado en PokeAPI' });
-    }
-
-    // Si ocurre otro error en PokeAPI
-    if (!response.ok) {
-      throw new Error(`PokeAPI respondió con estado ${response.status}`);
-    }
-
-    // Convertimos la respuesta a JSON
-    const rawData = await response.json();
-
-    // Devolvemos únicamente los datos necesarios
-    return res.status(200).json({
-  name: rawData.name,
-  height: rawData.height,
-  weight: rawData.weight,
-
-  species: rawData.species?.name || 'Desconocida',
-
-  sprites: {
-    front_default: rawData.sprites?.front_default || null,
-    back_default: rawData.sprites?.back_default || null,
-    front_shiny: rawData.sprites?.front_shiny || null
-  },
-
-  stats: rawData.stats.map((stat) => ({ // simplifica la estructura de datos de la pokeAPI
-    name: stat.stat.name,
-    value: stat.base_stat
-  })),
-
-  moves: rawData.moves.map((move) => move.move.name)
-});
-
-  } catch (error) {
-    console.error('🚨 Error en el servidor:', error.message);
-
-    return res.status(500).json({
-      error: 'Error de red en el servidor local',
-      message: error.message
+  if (result.rows.length === 0) {
+     return res.status(404).json({
+       error: 'Pokémon no encontrado en la base de datos'
     });
   }
-});
+
+  const pokemon = result.rows[0];
+
+  return res.status(200).json(pokemon);  
+
+    } catch (error) {
+      console.error('🚨 Error en el servidor:', error.message);
+
+      return res.status(500).json({
+        error: 'Error de red en el servidor local',
+        message: error.message
+      });
+    }
+  });
+
+pool.query('SELECT NOW()')
+.then(() => {
+  console.log('✅ Conectado correctamente a PostgreSQL');
+})
+
+.catch((error) => {
+  console.error('❌ Error conectando a PostgreSQL:', error.message);
+ });
 
 app.listen(PORT, () => {
   console.log(
