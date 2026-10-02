@@ -7,11 +7,11 @@ export type Transformation = {
 };
 
 export type Character = {
+  id: number;
   name: string;
   image: string;
   race: string;
-  description: string;
-  transformations: Transformation[];
+  gender: string;
 };
 
 type DragonBallContextType = {
@@ -25,7 +25,7 @@ const DragonBallContext = createContext<
   DragonBallContextType | undefined
 >(undefined);
 
-const API_URL = "http://172.16.3.0:3001";
+const API_URL = "https://dragonball-python-bpao.onrender.com";
 
 export function DragonBallProvider({
   children,
@@ -37,7 +37,7 @@ export function DragonBallProvider({
   const [error, setError] = useState("");
 
   const buscarCharacter = async (nombre: string) => {
-    const cleanName = nombre.trim().toLowerCase();
+    const cleanName = nombre.trim();
 
     setError("");
 
@@ -50,9 +50,7 @@ export function DragonBallProvider({
     try {
       setLoading(true);
 
-      const response = await fetch(
-        `${API_URL}/api/dragonball/${cleanName}`
-      );
+      const response = await fetch(`${API_URL}/api/characters/${cleanName}`);
 
       const data = await response.json();
 
@@ -65,7 +63,7 @@ export function DragonBallProvider({
       setCharacter(data);
     } catch (error) {
       setCharacter(null);
-      setError("No se pudo conectar con el servidor local");
+      setError("No se pudo conectar con el servidor");
     } finally {
       setLoading(false);
     }

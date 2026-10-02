@@ -50,7 +50,7 @@ export default function TabLayout() {
         <Tabs.Screen
           name="information"
           options={{
-            title: 'Informacion',
+            title: 'Info Pokémon',
             headerShown: false,
             tabBarIcon: ({ color, focused }) => (
               <Ionicons
@@ -78,11 +78,11 @@ export default function TabLayout() {
         <Tabs.Screen
           name="transformations"
           options={{
-            title: "Transformations",
+            title: "Info Dragon Ball",
             headerShown: false,
             tabBarIcon: ({ color }) => (
              <Ionicons
-               name="flash-outline"
+               name="information-circle-outline"
                size={28}
                color={color}
              />

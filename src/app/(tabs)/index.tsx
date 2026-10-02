@@ -61,41 +61,14 @@ export default function Index() {
       {/* Renderizado condicional: muestra la información si hay datos del Pokémon */}
 
 {pokemon && (
-  <View style={styles.resultContainer}>
+  <View style={styles.imageCard}>
+  <Image
+    source={{ uri: pokemon.image }}
+    style={styles.pokemonImage}
+    contentFit="contain"
+  />
+</View>
 
-    <Text style={styles.pokemonName}>
-      {pokemon.name.toUpperCase()}
-    </Text>
-
-    <View style={styles.imageCard}>
-      <Image
-        source={{ uri: pokemon.sprites.front_default || undefined }}
-        style={styles.pokemonImage}
-        contentFit="contain"
-      />
-    </View>
-
-    <View style={styles.smallImagesRow}>
-
-      <View style={styles.smallImageCard}>
-        <Image
-          source={{ uri: pokemon.sprites.back_default || undefined }}
-          style={styles.smallPokemonImage}
-          contentFit="contain"
-        />
-      </View>
-
-      <View style={styles.smallImageCard}>
-        <Image
-          source={{ uri: pokemon.sprites.front_shiny || undefined }}
-          style={styles.smallPokemonImage}
-          contentFit="contain"
-        />
-      </View>
-
-    </View>
-
-  </View>
 )}
     </ScrollView>
   );

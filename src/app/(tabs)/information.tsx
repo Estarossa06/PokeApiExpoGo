@@ -1,5 +1,6 @@
 import { router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
 import { usePokemon } from '../../context/PokemonContext';
 
 export default function InformationScreen() {
@@ -53,43 +54,19 @@ export default function InformationScreen() {
         <Text style={styles.infoText}>
           Peso: {(pokemon.weight / 10).toFixed(1)} kg
         </Text>
-
-        <Text style={styles.infoText}>
-          Especie: {pokemon.species}
-        </Text>
       </View>
-
+      
       <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Estadisticas</Text>
+       <Text style={styles.sectionTitle}>Imagen</Text>
 
-        {pokemon.stats.map((stat) => (
-          <View key={stat.name} style={styles.row}>
-            <Text style={styles.infoText}>
-              {stat.name}
-            </Text>
+       <Image
+         source={{ uri: pokemon.image }}
+         style={styles.pokemonImage}
+        contentFit="contain"
+       />
 
-            <Text style={styles.statValue}>
-              {stat.value}
-            </Text>
-          </View>
-        ))}
       </View>
 
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Movimientos</Text>
-
-        {pokemon.moves.map((move, index) => (
-          <View key={`${move}-${index}`} style={styles.moveRow}>
-            <Text style={styles.moveNumber}>
-              {index + 1}
-            </Text>
-
-            <Text style={styles.infoText}>
-              {move}
-            </Text>
-          </View>
-        ))}
-      </View>
     </ScrollView>
   );
 }
@@ -189,5 +166,9 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
+},
+  pokemonImage: {
+    width: '100%',
+    height: 250,
 },
 });

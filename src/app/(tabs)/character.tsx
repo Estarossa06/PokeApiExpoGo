@@ -77,13 +77,6 @@ export default function CharacterScreen() {
               {character.race}
             </Text>
 
-            <Text style={styles.label}>
-              Descripción
-            </Text>
-
-            <Text style={styles.description}>
-              {character.description}
-            </Text>
           </View>
         </View>
       )}

@@ -5,23 +5,11 @@ import {createContext, useContext, useState, type ReactNode} from "react";
 // --------------------------------------------------
 
 export type Pokemon = {
+  id: number;
   name: string;
   height: number;
   weight: number;
-  species: string;
-
-  sprites: {
-    front_default: string | null;
-    back_default: string | null;
-    front_shiny: string | null;
-  };
-
-  stats: {
-    name: string;
-    value: number;
-  }[];
-
-  moves: string[];
+  image: string;
 };
 
 // --------------------------------------------------
@@ -48,14 +36,13 @@ const PokemonContext = createContext<PokemonContextType | undefined>(
 // --------------------------------------------------
 
 // Cambiar IP_DE_MI_PC por la IP local de tu computador.
-const API_URL = "http://172.16.3.0:3000";
+const API_URL = "https://pokemon-backend-rfz3.onrender.com";
 
 // --------------------------------------------------
 // PROVIDER
 // --------------------------------------------------
-
 export function PokemonProvider({ children }: { children: ReactNode }) {
-  const [pokemon, setPokemon] = useState<Pokemon | null>(null);
+  const [pokemon, setPokemon] = useState<Pokemon |   null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -91,6 +78,8 @@ export function PokemonProvider({ children }: { children: ReactNode }) {
 
       setPokemon(data);
     } catch (error) {
+      console.error("🚨 ERROR REAL DEL FETCH:", error);
+
       setPokemon(null);
       setError("No se pudo conectar con el servidor local");
     } finally {

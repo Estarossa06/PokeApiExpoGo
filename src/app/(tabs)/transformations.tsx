@@ -1,9 +1,15 @@
 import { router } from 'expo-router';
-import {Text, View, StyleSheet, ScrollView, Pressable } from "react-native";
-import { Image } from "expo-image";
-import { useDragonBall } from "../../context/DragonBallContext";
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { Image } from 'expo-image';
+import { useDragonBall } from '../../context/DragonBallContext';
 
-export default function TransformationsScreen() {
+export default function InformationCharacterScreen() {
   const { character } = useDragonBall();
 
   if (!character) {
@@ -16,9 +22,9 @@ export default function TransformationsScreen() {
         <Pressable
           style={styles.backButton}
           onPress={() => router.replace('/character')}
-            >
+        >
           <Text style={styles.backButtonText}>
-                ← Volver a buscar
+            ← Volver a buscar
           </Text>
         </Pressable>
       </View>
@@ -32,35 +38,38 @@ export default function TransformationsScreen() {
       showsVerticalScrollIndicator={false}
     >
       <Text style={styles.title}>
-        Transformaciones de {character.name}
+        Información de {character.name}
       </Text>
 
-      {character.transformations.length === 0 ? (
-        <Text style={styles.emptyText}>
-          Este personaje no tiene transformaciones disponibles.
+      <View style={styles.imageCard}>
+        <Image
+          source={{ uri: character.image }}
+          style={styles.characterImage}
+          contentFit="contain"
+        />
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>
+          Características
         </Text>
-      ) : (
-        character.transformations.map((transformation) => (
-          <View
-            key={transformation.name}
-            style={styles.card}
-          >
-            <Image
-              source={{ uri: transformation.image }}
-              style={styles.transformationImage}
-              contentFit="contain"
-            />
 
-            <Text style={styles.transformationName}>
-              {transformation.name}
-            </Text>
+        <Text style={styles.infoText}>
+          ID: {character.id}
+        </Text>
 
-            <Text style={styles.ki}>
-              Ki: {transformation.ki}
-            </Text>
-          </View>
-        ))
-      )}
+        <Text style={styles.infoText}>
+          Nombre: {character.name}
+        </Text>
+
+        <Text style={styles.infoText}>
+          Raza: {character.race}
+        </Text>
+
+        <Text style={styles.infoText}>
+          Género: {character.gender}
+        </Text>
+      </View>
     </ScrollView>
   );
 }
@@ -68,59 +77,73 @@ export default function TransformationsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F7F4F5",
+    backgroundColor: '#F7F4F5',
   },
+
   content: {
     padding: 20,
     paddingBottom: 40,
   },
+
   title: {
     fontSize: 26,
-    fontWeight: "bold",
-    color: "#4F1720",
-    textAlign: "center",
+    fontWeight: 'bold',
+    color: '#4F1720',
+    textAlign: 'center',
     marginBottom: 20,
-    margin: 40,
+    marginTop: 40,
   },
-  card: {
-    backgroundColor: "#FFFFFF",
+
+  imageCard: {
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 18,
     marginBottom: 16,
-    alignItems: "center",
+    alignItems: 'center',
   },
-  transformationImage: {
-    width: "100%",
-    height: 220,
+
+  characterImage: {
+    width: '100%',
+    height: 250,
+  },
+
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 16,
+  },
+
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#4F1720',
     marginBottom: 12,
   },
-  transformationName: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#4F1720",
-    textAlign: "center",
-    marginBottom: 8,
-  },
-  ki: {
+
+  infoText: {
     fontSize: 16,
-    color: "#25292e",
-    fontWeight: "bold",
+    color: '#25292e',
+    marginBottom: 10,
   },
+
   emptyContainer: {
     flex: 1,
-    backgroundColor: "#F7F4F5",
-    justifyContent: "center",
-    alignItems: "center",
+    backgroundColor: '#F7F4F5',
+    justifyContent: 'center',
+    alignItems: 'center',
     paddingHorizontal: 30,
   },
+
   emptyText: {
-    color: "#4F1720",
+    color: '#4F1720',
     fontSize: 18,
-    fontWeight: "bold",
-    textAlign: "center",
+    fontWeight: 'bold',
+    textAlign: 'center',
     lineHeight: 26,
   },
-   backButton: {
+
+  backButton: {
     marginTop: 20,
     backgroundColor: '#4F1720',
     paddingVertical: 12,
@@ -132,5 +155,5 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
-},
+  },
 });
