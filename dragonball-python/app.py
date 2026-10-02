@@ -31,26 +31,26 @@ def get_characters():
     return jsonify(data) # Convierte los resultados en un JSON 
 
 # EndPoint llamado especifico
-@app.route("/api/characters/<int:character_id>", methods=["GET"])
-def get_character(character_id):
+@app.route("/api/characters/<name>", methods=["GET"])
+def get_character(name):
     """
-    Obtener un personaje por ID
+    Obtener un personaje por nombre
     ---
     parameters:
-      - name: character_id
+      - name: name
         in: path
-        type: integer
+        type: string
         required: true
-        description: ID del personaje
+        description: Nombre del personaje
     responses:
       200:
         description: Personaje encontrado
       404:
         description: Personaje no encontrado
     """
-    
+
     character = characters.find_one(
-        {"id": character_id},
+        {"name": {"$regex": f"^{name}$", "$options": "i"}},
         {"_id": 0}
     )
 
