@@ -11,16 +11,18 @@ export default function TabLayout() {
   const colorScheme = useColorScheme();
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <ThemeProvider
+      value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}
+    >
       <AnimatedSplashOverlay />
 
       <Tabs
         screenOptions={{
-          tabBarActiveTintColor: "#4F1720",
+          tabBarActiveTintColor: '#4F1720',
           tabBarInactiveTintColor: '#000000',
 
           headerStyle: {
-            backgroundColor: "#E5DDE0",
+            backgroundColor: '#E5DDE0',
           },
 
           headerShadowVisible: false,
@@ -28,7 +30,7 @@ export default function TabLayout() {
           headerTintColor: '',
 
           tabBarStyle: {
-            backgroundColor: "#E5DDE0",
+            backgroundColor: '#E5DDE0',
           },
         }}
       >
@@ -54,38 +56,55 @@ export default function TabLayout() {
             headerShown: false,
             tabBarIcon: ({ color, focused }) => (
               <Ionicons
-                name={focused ? 'list' : 'list' }
+                name={focused ? 'list' : 'list'}
                 color={color}
                 size={24}
               />
             ),
           }}
         />
+
         <Tabs.Screen
           name="character"
           options={{
-            title: "Character",
+            title: 'Character',
             headerShown: false,
             tabBarIcon: ({ color }) => (
-             <Ionicons
-               name="person-circle-outline"
-               size={28}
-               color={color}
-             />
+              <Ionicons
+                name="person-circle-outline"
+                size={28}
+                color={color}
+              />
             ),
           }}
         />
+
         <Tabs.Screen
           name="transformations"
           options={{
-            title: "Info Dragon Ball",
+            title: 'Info Dragon Ball',
             headerShown: false,
             tabBarIcon: ({ color }) => (
-             <Ionicons
-               name="information-circle-outline"
-               size={28}
-               color={color}
-             />
+              <Ionicons
+                name="information-circle-outline"
+                size={28}
+                color={color}
+              />
+            ),
+          }}
+        />
+
+        <Tabs.Screen
+          name="profesores"
+          options={{
+            title: 'Profesores',
+            headerShown: false,
+            tabBarIcon: ({ color }) => (
+              <Ionicons
+                name="people-outline"
+                size={28}
+                color={color}
+              />
             ),
           }}
         />
