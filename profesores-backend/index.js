@@ -34,12 +34,20 @@ const server = http.createServer(async (req, res) => {
 
   res.setHeader('Content-Type', 'application/json');
 
+    // Obtener la ruta sin query params
+  const url = new URL(
+    req.url,
+    `http://${req.headers.host}`
+  );
+
+  const pathname = url.pathname;
+
 
   // ==================================================
   // SWAGGER
   // ==================================================
 
-  if (req.url === '/api-docs') {
+  if (pathname === '/api-docs') {
 
     const html = `
 <!DOCTYPE html>
@@ -107,7 +115,7 @@ const server = http.createServer(async (req, res) => {
   // ARCHIVO OPENAPI
   // ==================================================
 
-  if (req.url === '/openapi.yaml') {
+  if (pathname === '/openapi.yaml') {
 
     try {
 
@@ -206,14 +214,6 @@ const server = http.createServer(async (req, res) => {
   // ==================================================
 
   if (req.method === 'GET') {
-
-    // Separar ruta y query params
-    const url = new URL(
-      req.url,
-      `http://${req.headers.host}`
-    );
-
-    const pathname = url.pathname;
 
 
     // Ruta principal de profesores
