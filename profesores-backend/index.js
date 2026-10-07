@@ -276,6 +276,17 @@ const server = http.createServer(async (req, res) => {
         }
       }
 
+      // Validar que el nombre tenga al menos 3 caracteres.
+      if (datos.nombre.trim().length < 3) {
+        res.statusCode = 400;
+
+        res.end(JSON.stringify({
+          error: 'El nombre debe tener al menos 3 caracteres'
+        }));
+
+        return;
+      }
+
       // Obtener la base de datos y la colección
       const db = client.db('pokeanime');
       const profesores = db.collection('profesores');
@@ -562,6 +573,17 @@ const server = http.createServer(async (req, res) => {
 
           return;
         }
+      }
+
+      // Validar que el nombre tenga al menos 3 caracteres.
+      if (datos.nombre.trim().length < 3) {
+        res.statusCode = 400;
+
+        res.end(JSON.stringify({
+          error: 'El nombre debe tener al menos 3 caracteres'
+        }));
+
+        return;
       }
 
       // Obtener la base de datos y la colección
