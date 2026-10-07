@@ -96,7 +96,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: "bold",
-    color: "#4F1720",
+    color: '#800020',
     textAlign: "center",
     marginBottom: 20,
     margin: 40,
@@ -111,7 +111,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   button: {
-    backgroundColor: "#4F1720",
+    backgroundColor: '#800020',
     paddingVertical: 13,
     borderRadius: 12,
     alignItems: "center",
@@ -136,7 +136,7 @@ const styles = StyleSheet.create({
   characterName: {
     fontSize: 26,
     fontWeight: "bold",
-    color: "#4F1720",
+    color: '#800020',
     textAlign: "center",
     marginBottom: 16,
   },
@@ -160,7 +160,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 18,
     fontWeight: "bold",
-    color: "#4F1720",
+    color: '#800020',
     marginBottom: 6,
   },
   infoText: {

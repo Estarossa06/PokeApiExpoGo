@@ -47,7 +47,7 @@ export default function Index() {
       {loading && (
         <ActivityIndicator
           size="large"
-          color="#4F1720"
+          color='#800020'
         />
       )}
 
@@ -104,7 +104,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 34,
     fontWeight: "800",
-    color: "#4F1720",
+    color: '#800020',
     marginBottom: 5,
   },
 
@@ -141,12 +141,12 @@ const styles = StyleSheet.create({
     width: 55,
     height: 55,
     borderRadius: 14,
-    backgroundColor: "#4F1720",
+    backgroundColor: '#800020',
     alignItems: "center",
     justifyContent: "center",
 
     // Sombra en iOS.
-    shadowColor: "#4F1720",
+    shadowColor: '#800020',
     shadowOffset: {
       width: 0,
       height: 4,
@@ -195,7 +195,7 @@ const styles = StyleSheet.create({
   pokemonName: {
     fontSize: 28,
     fontWeight: "800",
-    color: "#4F1720",
+    color: '#800020',
     textAlign: "center",
     marginBottom: 15,
   },
@@ -261,7 +261,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: "800",
-    color: "#4F1720",
+    color: '#800020',
     marginBottom: 12,
   },
 
@@ -306,7 +306,7 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 28,
     fontWeight: "800",
-    color: "#4F1720",
+    color: '#800020',
   },
 
   statUnit: {
@@ -345,7 +345,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: "#4F1720",
+    backgroundColor: '#800020',
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,

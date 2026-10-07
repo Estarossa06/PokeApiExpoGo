@@ -85,7 +85,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#4F1720',
+    color: '#800020',
     textAlign: 'center',
     marginBottom: 20,
     margin: 40,
@@ -101,7 +101,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#4F1720',
+    color: '#800020',
     marginBottom: 12,
   },
 
@@ -123,7 +123,7 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#4F1720',
+    color: '#800020',
   },
 
   moveRow: {
@@ -136,7 +136,7 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: '#4F1720',
+    backgroundColor: '#800020',
     color: '#FFFFFF',
     textAlign: 'center',
     textAlignVertical: 'center',
@@ -146,7 +146,7 @@ const styles = StyleSheet.create({
   },
 
   text: {
-    color: '#4F1720',
+    color: '#800020',
     fontSize: 20,
     fontWeight: 'bold',
     textAlign: 'center',
@@ -156,7 +156,7 @@ const styles = StyleSheet.create({
 
   backButton: {
     marginTop: 20,
-    backgroundColor: '#4F1720',
+    backgroundColor: '#800020',
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 12,
