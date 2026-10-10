@@ -61,11 +61,41 @@ function normalizarTexto(texto) {
     .trim();
 }
 
+
 const server = http.createServer(async (req, res) => {
+
+    // Permitir peticiones desde Expo Web en desarrollo.
+  const origen = req.headers.origin;
+  const origenesPermitidos = [
+    'http://localhost:8081',
+    'http://127.0.0.1:8081',
+  ];
+
+  if (origen && origenesPermitidos.includes(origen)) {
+    res.setHeader('Access-Control-Allow-Origin', origen);
+  }
+
+  res.setHeader(
+    'Access-Control-Allow-Methods',
+    'GET, POST, PUT, DELETE, OPTIONS'
+  );
+
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'Content-Type'
+  );
+
+  // Responder las solicitudes preliminares del navegador.
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
 
   res.setHeader('Content-Type', 'application/json');
 
   // Obtener la ruta sin query params
+
   const url = new URL(
     req.url,
     `http://${req.headers.host}`
@@ -781,7 +811,6 @@ async function iniciarServidor() {
 
   }
 }
-
 
 // Iniciar aplicación
 iniciarServidor();
