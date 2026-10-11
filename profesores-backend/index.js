@@ -7,6 +7,7 @@ const { URL } = require('url');
 // Archivos y rutas
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 // Variables de entorno
 require('dotenv').config();
@@ -54,11 +55,92 @@ function obtenerBody(req) {
 
 // Normaliza un texto para facilitar las búsquedas
 function normalizarTexto(texto) {
-  return texto
+  return String(texto ?? '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
-    .trim();
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+function claveUnicaProfesor(profesor) {
+  const campos = [
+    profesor.nombre,
+    profesor.formacion,
+    profesor.profesion,
+    profesor.cargo,
+    profesor.area,
+  ].map(normalizarTexto);
+
+  return crypto
+    .createHash('sha256')
+    .update(JSON.stringify(campos), 'utf8')
+    .digest('hex');
+}
+
+function profesorPublico(profesor) {
+  if (!profesor) return profesor;
+  const { _id, dedupKey, ...publico } = profesor;
+  return publico;
+}
+
+async function prepararDeduplicacion(db) {
+  const profesores = db.collection('profesores');
+  const documentos = await profesores.find({}).toArray();
+  const grupos = new Map();
+
+  for (const profesor of documentos) {
+    const camposRequeridos = [
+      profesor.nombre,
+      profesor.formacion,
+      profesor.profesion,
+      profesor.cargo,
+      profesor.area,
+    ];
+    if (camposRequeridos.some((campo) => typeof campo !== 'string' || !campo.trim())) {
+      continue;
+    }
+
+    const clave = claveUnicaProfesor(profesor);
+    const grupo = grupos.get(clave) ?? [];
+    grupo.push(profesor);
+    grupos.set(clave, grupo);
+  }
+
+  for (const [dedupKey, grupo] of grupos) {
+    grupo.sort((a, b) => a.id - b.id);
+    const canonico = grupo[0];
+    const fotoPreferida = canonico.foto || grupo.find((p) => p.foto)?.foto || '';
+
+    await profesores.updateOne(
+      { _id: canonico._id },
+      { $set: { dedupKey, foto: fotoPreferida } }
+    );
+
+    if (grupo.length > 1) {
+      await profesores.deleteMany({
+        _id: { $in: grupo.slice(1).map((profesor) => profesor._id) },
+      });
+      console.warn(
+        `Deduplicación inicial: se conservaron ${canonico.id} y se quitaron ${grupo.length - 1} duplicado(s)`
+      );
+    }
+  }
+
+  await profesores.createIndex(
+    { dedupKey: 1 },
+    { unique: true, sparse: true, name: 'uq_profesores_dedup_key' }
+  );
+
+  const ultimo = await profesores.findOne(
+    {},
+    { sort: { id: -1 }, projection: { id: 1 } }
+  );
+  await db.collection('contadores').updateOne(
+    { _id: 'profesores' },
+    { $max: { secuencia: ultimo?.id ?? 0 } },
+    { upsert: true }
+  );
 }
 
 
@@ -320,24 +402,23 @@ const server = http.createServer(async (req, res) => {
       // Obtener la base de datos y la colección
       const db = client.db('pokeanime');
       const profesores = db.collection('profesores');
+      const dedupKey = claveUnicaProfesor(datos);
+      const existente = await profesores.findOne({ dedupKey });
+
+      if (existente) {
+        res.statusCode = 200;
+        res.end(JSON.stringify(profesorPublico(existente)));
+        return;
+      }
 
       // Buscar el profesor con el ID más alto
-      const ultimoProfesor = await profesores.findOne(
-        {},
-        {
-          sort: {
-            id: -1
-          },
-          projection: {
-            id: 1
-          }
-        }
-      );
-
       // Generar el siguiente ID disponible
-      const nuevoId = ultimoProfesor
-        ? ultimoProfesor.id + 1
-        : 1;
+      const contador = await db.collection('contadores').findOneAndUpdate(
+        { _id: 'profesores' },
+        { $inc: { secuencia: 1 } },
+        { upsert: true, returnDocument: 'after' }
+      );
+      const nuevoId = contador.secuencia;
 
       // Crear el nuevo documento
       const nuevoProfesor = {
@@ -347,16 +428,29 @@ const server = http.createServer(async (req, res) => {
         formacion: datos.formacion.trim(),
         profesion: datos.profesion.trim(),
         cargo: datos.cargo.trim(),
-        area: datos.area.trim()
+        area: datos.area.trim(),
+        dedupKey,
       };
 
       // Insertar el profesor en MongoDB
-      await profesores.insertOne(nuevoProfesor);
+      try {
+        await profesores.insertOne(nuevoProfesor);
+      } catch (error) {
+        if (error.code === 11000) {
+          const ganador = await profesores.findOne({ dedupKey });
+          if (ganador) {
+            res.statusCode = 200;
+            res.end(JSON.stringify(profesorPublico(ganador)));
+            return;
+          }
+        }
+        throw error;
+      }
 
       // Responder con el profesor creado
       res.statusCode = 201;
 
-      res.end(JSON.stringify(nuevoProfesor));
+      res.end(JSON.stringify(profesorPublico(nuevoProfesor)));
 
     } catch (error) {
 
@@ -425,7 +519,8 @@ const server = http.createServer(async (req, res) => {
             },
             {
               projection: {
-                _id: 0
+                _id: 0,
+                dedupKey: 0
               }
             }
           );
@@ -447,7 +542,7 @@ const server = http.createServer(async (req, res) => {
           // Respuesta exitosa
           res.statusCode = 200;
 
-          res.end(JSON.stringify(profesor));
+          res.end(JSON.stringify(profesorPublico(profesor)));
 
           return;
         }
@@ -479,7 +574,8 @@ const server = http.createServer(async (req, res) => {
               {},
               {
                 projection: {
-                  _id: 0
+                  _id: 0,
+                  dedupKey: 0
                 }
               }
             )
@@ -508,7 +604,7 @@ const server = http.createServer(async (req, res) => {
           // Devolver todos los profesores encontrados
           res.statusCode = 200;
 
-          res.end(JSON.stringify(resultados));
+          res.end(JSON.stringify(resultados.map(profesorPublico)));
 
           return;
         }
@@ -522,7 +618,8 @@ const server = http.createServer(async (req, res) => {
             {},
             {
               projection: {
-                _id: 0
+                _id: 0,
+                dedupKey: 0
               }
             }
           )
@@ -530,7 +627,7 @@ const server = http.createServer(async (req, res) => {
 
         res.statusCode = 200;
 
-        res.end(JSON.stringify(resultado));
+        res.end(JSON.stringify(resultado.map(profesorPublico)));
 
       } catch (error) {
 
@@ -647,7 +744,8 @@ const server = http.createServer(async (req, res) => {
         formacion: datos.formacion.trim(),
         profesion: datos.profesion.trim(),
         cargo: datos.cargo.trim(),
-        area: datos.area.trim()
+        area: datos.area.trim(),
+        dedupKey: claveUnicaProfesor(datos)
       };
 
       // Actualizar el documento en MongoDB
@@ -663,9 +761,17 @@ const server = http.createServer(async (req, res) => {
       // Devolver el profesor actualizado
       res.statusCode = 200;
 
-      res.end(JSON.stringify(profesorActualizado));
+      res.end(JSON.stringify(profesorPublico(profesorActualizado)));
 
     } catch (error) {
+
+      if (error.code === 11000) {
+        res.statusCode = 409;
+        res.end(JSON.stringify({
+          error: 'Ya existe un profesor con los mismos datos, excepto la foto'
+        }));
+        return;
+      }
 
       console.error(
         'Error actualizando profesor:',
@@ -787,6 +893,8 @@ async function iniciarServidor() {
 
     // Conectar con MongoDB
     await client.connect();
+
+    await prepararDeduplicacion(client.db('pokeanime'));
 
     console.log(
       '✅ Conectado correctamente a MongoDB Atlas'

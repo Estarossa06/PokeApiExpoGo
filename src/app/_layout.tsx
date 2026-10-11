@@ -1,10 +1,11 @@
 
-import { useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
-import { PokemonProvider } from '../context/PokemonContext';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { DragonBallProvider } from '../context/DragonBallContext';
+import { PokemonProvider } from '../context/PokemonContext';
 import { ProfesoresProvider } from '../context/ProfesoresContext';
-import { inicializarDB } from '../database/profesoresDB';
+import { inicializarDB } from '../database/profesoresSQLite';
 
 export default function RootLayout() {
   const [dbLista, setDbLista] = useState(false);
@@ -20,11 +21,21 @@ export default function RootLayout() {
   }, []);
 
   if (dbError) {
-    return null;
+    return (
+      <View style={styles.statusContainer}>
+        <Text style={styles.errorTitle}>No se pudo iniciar la aplicación</Text>
+        <Text style={styles.errorMessage}>{dbError}</Text>
+      </View>
+    );
   }
 
   if (!dbLista) {
-    return null;
+    return (
+      <View style={styles.statusContainer}>
+        <ActivityIndicator size="large" color="#800020" />
+        <Text style={styles.loadingMessage}>Preparando la base de datos…</Text>
+      </View>
+    );
   }
 
   return (
@@ -39,3 +50,29 @@ export default function RootLayout() {
     </PokemonProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  statusContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+    backgroundColor: '#F7F4F5',
+  },
+  loadingMessage: {
+    marginTop: 12,
+    color: '#333333',
+    textAlign: 'center',
+  },
+  errorTitle: {
+    color: '#800020',
+    fontSize: 18,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  errorMessage: {
+    marginTop: 8,
+    color: '#333333',
+    textAlign: 'center',
+  },
+});

@@ -1,30 +1,37 @@
 
 import {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  useCallback,
-  useRef,
   ReactNode,
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
 } from 'react';
 
 import NetInfo from '@react-native-community/netinfo';
 
 import {
   ProfesorLocal,
-  obtenerProfesores,
-  guardarProfesorLocal,
-  guardarProfesorDescargado,
-  actualizarProfesorLocal,
-  eliminarProfesorLocal,
-  crearProfesorOffline,
-  registrarOperacionPendiente,
-  obtenerOperacionesPendientes,
   completarOperacionPendiente,
+  crearProfesorOffline,
+  eliminarDocentesRecientesAusentes,
+  eliminarProfesorLocal,
+  guardarDocenteDetectadoEnNube,
+  guardarProfesorDescargado,
+  guardarProfesorLocal,
+  marcarDocenteComoReciente,
   marcarProfesorSincronizado,
-  actualizarIdRemotoProfesor,
-} from '../database/profesoresDB';
+  obtenerDocentesRecientes,
+  obtenerOperacionesPendientes,
+  obtenerProfesores,
+  registrarOperacionPendiente,
+  actualizarFotoPendiente,
+  vincularProfesorConRemoto
+} from '../database/profesoresSQLite';
+
+import { fetch as expoFetch } from 'expo/fetch';
+import { File } from 'expo-file-system';
 
 const API = 'https://profesores-backend.onrender.com/api/profesores';
 
@@ -36,10 +43,15 @@ export interface Profesores {
   profesion: string;
   cargo: string;
   area: string;
+  nuevoRemoto?: boolean;
 }
 
 interface ProfesoresContextType {
   profesores: Profesores[];
+  docentesRecientes: Profesores[];
+  intervaloMonitoreo: 2 | 10 | 30;
+  setIntervaloMonitoreo: (segundos: 2 | 10 | 30) => void;
+  monitoreoActivo: boolean;
   loading: boolean;
   error: string | null;
   buscarProfesor: (nombre: string) => Promise<void>;
@@ -61,6 +73,7 @@ function convertirLocal(p: ProfesorLocal): Profesores {
     profesion: p.profesion,
     cargo: p.cargo,
     area: p.area,
+    nuevoRemoto: p.nuevo_remoto === 1,
   };
 }
 
@@ -84,6 +97,32 @@ function datosServidor(p: Profesores): Omit<
   };
 }
 
+function normalizarCampo(valor: string): string {
+  return valor
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase()
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+function mismosDatos(
+  a: Pick<Profesores, 'nombre' | 'formacion' | 'profesion' | 'cargo' | 'area'>,
+  b: Pick<Profesores, 'nombre' | 'formacion' | 'profesion' | 'cargo' | 'area'>
+): boolean {
+  const campos = [
+    'nombre',
+    'formacion',
+    'profesion',
+    'cargo',
+    'area',
+  ] as const;
+
+  return campos.every(
+    (campo) => normalizarCampo(a[campo]) === normalizarCampo(b[campo])
+  );
+}
+
 async function hayInternet(): Promise<boolean> {
   const estado = await NetInfo.fetch();
 
@@ -93,21 +132,86 @@ async function hayInternet(): Promise<boolean> {
   );
 }
 
+async function subirFotoCloudinary(uri: string): Promise<string> {
+  const archivo = new File(uri);
+  const datos = new FormData();
+
+  datos.append('file', archivo);
+  datos.append('upload_preset', 'profesores_fotos');
+
+  const respuesta = await expoFetch(
+    'https://api.cloudinary.com/v1_1/khrqmkui/image/upload',
+    {
+      method: 'POST',
+      body: datos,
+    }
+  );
+
+  const resultado = await respuesta.json();
+
+  if (!respuesta.ok) {
+    throw new Error('No se pudo subir la foto a Cloudinary');
+  }
+
+  return resultado.secure_url;
+}
+
 export function ProfesoresProvider({
   children,
 }: {
   children: ReactNode;
 }) {
+
   const [profesores, setProfesor] = useState<Profesores[]>([]);
+  const [docentesRecientes, setDocentesRecientes] = useState<Profesores[]>([]);
+  const [intervaloMonitoreo, setIntervaloMonitoreo] = useState<2 | 10 | 30>(10);
+  const [monitoreoActivo, setMonitoreoActivo] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const sincronizando = useRef(false);
+  // IDs de creaciones offline que deben entrar al historial en el próximo sondeo.
 
-  const cargarLocales = useCallback(async () => {
-    const locales = await obtenerProfesores();
-    setProfesor(locales.map(convertirLocal));
+  const cargarRecientes = useCallback(async () => {
+    const recientes = await obtenerDocentesRecientes();
+    setDocentesRecientes(recientes.map(convertirLocal));
   }, []);
+
+  // Consulta el listado completo de la nube y registra las inserciones nuevas.
+  const consultarCambiosNube = useCallback(async () => {
+    if (!(await hayInternet())) {
+      setMonitoreoActivo(false);
+      return;
+    }
+
+    try {
+      const respuesta = await fetch(API);
+      if (!respuesta.ok) throw new Error('No se pudo consultar el listado remoto');
+
+      const remotos: Profesores[] = await respuesta.json();
+      if (!Array.isArray(remotos)) {
+        throw new Error('El servidor no devolvió una lista de docentes');
+      }
+
+      // El historial solo conserva docentes que siguen existiendo en la nube.
+      await eliminarDocentesRecientesAusentes(
+        remotos.map((remoto) => remoto.id)
+      );
+
+      for (const remoto of remotos) {
+        await guardarDocenteDetectadoEnNube({
+          ...datosServidor(remoto),
+          id_remoto: remoto.id,
+        });
+      }
+
+      await cargarRecientes();
+      setMonitoreoActivo(true);
+    } catch (e) {
+      setMonitoreoActivo(false);
+      console.warn('No se pudieron comprobar cambios en la nube:', e);
+    }
+  }, [cargarRecientes]);
 
   const sincronizar = useCallback(async () => {
     if (sincronizando.current || !(await hayInternet())) {
@@ -130,34 +234,79 @@ export function ProfesoresProvider({
             ? JSON.parse(op.datos)
             : null;
 
-          if (op.operacion === 'CREATE') {
-            const respuesta = await fetch(API, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                nombre: datos.nombre,
-                foto: datos.foto,
-                formacion: datos.formacion,
-                profesion: datos.profesion,
-                cargo: datos.cargo,
-                area: datos.area,
-              }),
-            });
 
-            if (!respuesta.ok) {
-              throw new Error('No se pudo sincronizar la creación');
+
+          if (op.operacion === 'CREATE') {
+            const respuestaLista = await fetch(API);
+
+            if (!respuestaLista.ok) {
+              throw new Error('No se pudo comprobar si el docente existe en la nube');
             }
 
-            const remoto: Profesores = await respuesta.json();
+            const remotos: Profesores[] = await respuestaLista.json();
 
-            await actualizarIdRemotoProfesor(
+            if (!Array.isArray(remotos)) {
+              throw new Error('El servidor no devolvió una lista de docentes');
+            }
+
+            const coincidente = remotos.find((remoto) =>
+              mismosDatos(datos, remoto)
+            );
+            const remotoYaEstabaLocal = coincidente
+              ? locales.some((p) => p.id_remoto === coincidente.id)
+              : false;
+
+            let remotoFinal: Profesores;
+
+            if (coincidente) {
+              remotoFinal = coincidente;
+            } else {
+              if (!datos.foto.startsWith('http')) {
+                const fotoUrl = await subirFotoCloudinary(datos.foto);
+                await actualizarFotoPendiente(
+                  op.id,
+                  op.profesor_id,
+                  fotoUrl
+                );
+                datos.foto = fotoUrl;
+              }
+
+              const respuesta = await fetch(API, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  nombre: datos.nombre,
+                  foto: datos.foto,
+                  formacion: datos.formacion,
+                  profesion: datos.profesion,
+                  cargo: datos.cargo,
+                  area: datos.area,
+                }),
+              });
+
+              if (!respuesta.ok) {
+                throw new Error('No se pudo sincronizar la creación');
+              }
+
+              remotoFinal = await respuesta.json();
+            }
+
+            await vincularProfesorConRemoto(
               op.profesor_id,
-              remoto.id
+              remotoFinal,
+              !remotoYaEstabaLocal
             );
 
-            await marcarProfesorSincronizado(op.profesor_id);
+            setProfesor((actuales) =>
+              actuales.map((p) =>
+                p.id === op.profesor_id
+                  ? { ...remotoFinal, id: op.profesor_id }
+                  : p
+              )
+            );
+            await cargarRecientes();
           }
 
           if (op.operacion === 'UPDATE') {
@@ -213,19 +362,16 @@ export function ProfesoresProvider({
         }
       }
 
-      await cargarLocales();
     } catch (e) {
       console.error('Error de sincronización:', e);
     } finally {
       sincronizando.current = false;
     }
-  }, [cargarLocales]);
+  }, [cargarRecientes]);
 
   useEffect(() => {
-    cargarLocales().catch((e) => {
-      console.error('Error cargando SQLite:', e);
-      setError('No se pudieron cargar los profesores locales');
-    });
+    cargarRecientes().catch((e) => console.warn('Error cargando historial:', e));
+    void consultarCambiosNube();
 
     const unsubscribe = NetInfo.addEventListener((estado) => {
       if (
@@ -233,11 +379,22 @@ export function ProfesoresProvider({
         estado.isInternetReachable !== false
       ) {
         void sincronizar();
+        void consultarCambiosNube();
+      } else {
+        setMonitoreoActivo(false);
       }
     });
 
     return unsubscribe;
-  }, [cargarLocales, sincronizar]);
+  }, [cargarRecientes, sincronizar, consultarCambiosNube]);
+
+  useEffect(() => {
+    const intervalo = setInterval(() => {
+      void consultarCambiosNube();
+    }, intervaloMonitoreo * 1000);
+
+    return () => clearInterval(intervalo);
+  }, [intervaloMonitoreo, consultarCambiosNube]);
 
   const buscarProfesor = async (nombre: string) => {
     setLoading(true);
@@ -312,12 +469,41 @@ export function ProfesoresProvider({
     try {
       if (await hayInternet()) {
         try {
+          const respuestaLista = await fetch(API);
+          if (!respuestaLista.ok) {
+            throw new Error('No se pudo comprobar el listado de Atlas');
+          }
+
+          const remotos: Profesores[] = await respuestaLista.json();
+          const coincidente = remotos.find((remoto) =>
+            mismosDatos(profesor, remoto)
+          );
+
+          if (coincidente) {
+            const yaEstabaLocal = (await obtenerProfesores()).some(
+              (p) => p.id_remoto === coincidente.id
+            );
+            await guardarProfesorDescargado(datosServidor(coincidente));
+            if (!yaEstabaLocal) {
+              await marcarDocenteComoReciente(coincidente.id);
+              await cargarRecientes();
+            }
+            setProfesor((actuales) => [...actuales, coincidente]);
+            return true;
+          }
+
+          let profesorParaCrear = profesor;
+          if (!profesor.foto.startsWith('http')) {
+            const fotoUrl = await subirFotoCloudinary(profesor.foto);
+            profesorParaCrear = { ...profesor, foto: fotoUrl };
+          }
+
           const respuesta = await fetch(API, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify(profesor),
+            body: JSON.stringify(profesorParaCrear),
           });
 
           if (!respuesta.ok) {
@@ -326,11 +512,14 @@ export function ProfesoresProvider({
           }
 
           const remoto: Profesores = await respuesta.json();
+          await guardarProfesorDescargado(datosServidor(remoto));
+          if (respuesta.status === 201) {
+            await marcarDocenteComoReciente(remoto.id);
+            await cargarRecientes();
+          }
 
-          await guardarProfesorDescargado(
-            datosServidor(remoto)
-          );
-
+          // El historial se actualiza únicamente en el siguiente sondeo,
+          // respetando el intervalo configurado por el usuario.
           setProfesor((actuales) => [...actuales, remoto]);
           return true;
         } catch (e) {
@@ -340,7 +529,9 @@ export function ProfesoresProvider({
 
       const id = await crearProfesorOffline({
         ...profesor,
-        foto_local_uri: null,
+        foto_local_uri: profesor.foto.startsWith('http')
+          ? null
+          : profesor.foto,
       });
 
       setProfesor((actuales) => [
@@ -507,6 +698,7 @@ export function ProfesoresProvider({
           setProfesor((actuales) =>
             actuales.filter((p) => p.id !== id)
           );
+          await cargarRecientes();
 
           return true;
         } catch (e) {
@@ -537,6 +729,7 @@ export function ProfesoresProvider({
       setProfesor((actuales) =>
         actuales.filter((p) => p.id !== id)
       );
+      await cargarRecientes();
 
       return true;
     } catch (e) {
@@ -556,6 +749,10 @@ export function ProfesoresProvider({
     <ProfesoresContext.Provider
       value={{
         profesores,
+        docentesRecientes,
+        intervaloMonitoreo,
+        setIntervaloMonitoreo,
+        monitoreoActivo,
         loading,
         error,
         buscarProfesor,
