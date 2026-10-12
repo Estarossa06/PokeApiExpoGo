@@ -61,13 +61,26 @@ export default function ProfesoresScreen() {
       }
     );
 
-    const resultado = await respuesta.json();
+    const resultado: { secure_url?: unknown; error?: { message?: string } } =
+      await respuesta.json();
 
     if (!respuesta.ok) {
       throw new Error(
         resultado.error?.message ||
         'No se pudo subir la imagen a Cloudinary'
       );
+    }
+
+    if (typeof resultado.secure_url !== 'string') {
+      throw new Error('Cloudinary no devolvió la URL de la imagen');
+    }
+
+    const urlCloudinary = new URL(resultado.secure_url);
+    if (
+      urlCloudinary.protocol !== 'https:' ||
+      urlCloudinary.hostname !== 'res.cloudinary.com'
+    ) {
+      throw new Error('Cloudinary devolvió una URL inválida');
     }
 
     return resultado.secure_url;
@@ -772,9 +785,11 @@ export default function ProfesoresScreen() {
                     <Text style={styles.recentName}>{docente.nombre}</Text>
                     <Text style={styles.recentArea}>Área: {docente.area || 'Sin especificar'}</Text>
                   </View>
-                  <View style={styles.newBadge}>
-                    <Text style={styles.newBadgeText}>NUEVO</Text>
-                  </View>
+                  {docente.nuevoRemoto && (
+                    <View style={styles.newBadge}>
+                      <Text style={styles.newBadgeText}>NUEVO</Text>
+                    </View>
+                  )}
                 </View>
               ))
             )}

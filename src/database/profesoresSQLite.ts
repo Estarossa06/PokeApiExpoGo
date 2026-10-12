@@ -14,8 +14,11 @@ export interface ProfesorLocal {
     foto_local_uri: string | null;
     sincronizado: number;
     nuevo_remoto?: number;
+    nuevo_visto?: number;
     fecha_detectado?: string | null;
 }
+
+export type IntervaloMonitoreo = 2 | 10 | 30;
 
 export const dbPromise = SQLite.openDatabaseAsync('pokeanime.db');
 
@@ -36,6 +39,7 @@ export async function inicializarDB() {
       foto_local_uri TEXT,
       sincronizado INTEGER NOT NULL DEFAULT 1,
       nuevo_remoto INTEGER NOT NULL DEFAULT 0,
+      nuevo_visto INTEGER NOT NULL DEFAULT 0,
       fecha_detectado TEXT
      );
   `);
@@ -69,6 +73,15 @@ export async function inicializarDB() {
         );
     }
 
+    const tieneNuevoVisto = columnas.some(
+        (columna) => columna.name === 'nuevo_visto'
+    );
+    if (!tieneNuevoVisto) {
+        await db.execAsync(
+            'ALTER TABLE profesores ADD COLUMN nuevo_visto INTEGER NOT NULL DEFAULT 0'
+        );
+    }
+
     const tieneFechaDetectado = columnas.some(
         (columna) => columna.name === 'fecha_detectado'
     );
@@ -89,6 +102,38 @@ export async function inicializarDB() {
     );
   `);
 
+    await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS preferencias_app (
+      clave TEXT PRIMARY KEY NOT NULL,
+      valor TEXT NOT NULL
+    );
+  `);
+
+}
+
+// Persistencia del intervalo: conserva la selección del usuario entre reinicios.
+export async function obtenerIntervaloMonitoreo(): Promise<IntervaloMonitoreo> {
+    const db = await dbPromise;
+    const preferencia = await db.getFirstAsync<{ valor: string }>(
+        'SELECT valor FROM preferencias_app WHERE clave = ?',
+        'intervalo_monitoreo'
+    );
+    const valor = Number(preferencia?.valor);
+
+    return valor === 2 || valor === 10 || valor === 30 ? valor : 10;
+}
+
+export async function guardarIntervaloMonitoreo(
+    segundos: IntervaloMonitoreo
+): Promise<void> {
+    const db = await dbPromise;
+    await db.runAsync(
+        `INSERT INTO preferencias_app (clave, valor)
+         VALUES (?, ?)
+         ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor`,
+        'intervalo_monitoreo',
+        String(segundos)
+    );
 }
 
 export async function obtenerProfesores(): Promise<ProfesorLocal[]> {
@@ -109,11 +154,10 @@ export async function obtenerDocentesRecientes(): Promise<ProfesorLocal[]> {
 }
 
 /**
- * Quita del historial (y de SQLite) los docentes detectados como nuevos
- * que ya no existen en la lista vigente del servidor.
- * Solo elimina registros sincronizados, nunca cambios locales pendientes.
+ * Elimina de SQLite los registros sincronizados que ya no están en la nube.
+ * Conserva las filas con cambios locales pendientes.
  */
-export async function eliminarDocentesRecientesAusentes(
+export async function eliminarProfesoresSincronizadosAusentes(
     idsRemotosExistentes: number[]
 ): Promise<void> {
     const db = await dbPromise;
@@ -121,8 +165,7 @@ export async function eliminarDocentesRecientesAusentes(
     if (idsRemotosExistentes.length === 0) {
         await db.runAsync(
             `DELETE FROM profesores
-             WHERE nuevo_remoto = 1
-               AND sincronizado = 1
+             WHERE sincronizado = 1
                AND id_remoto IS NOT NULL`
         );
         return;
@@ -131,8 +174,7 @@ export async function eliminarDocentesRecientesAusentes(
     const placeholders = idsRemotosExistentes.map(() => '?').join(', ');
     await db.runAsync(
         `DELETE FROM profesores
-         WHERE nuevo_remoto = 1
-           AND sincronizado = 1
+         WHERE sincronizado = 1
            AND id_remoto IS NOT NULL
            AND id_remoto NOT IN (${placeholders})`,
         ...idsRemotosExistentes
@@ -156,6 +198,14 @@ export async function marcarDocenteComoReciente(idRemoto: number): Promise<void>
     );
 }
 
+export async function marcarDocenteNuevoComoVisto(idRemoto: number): Promise<void> {
+    const db = await dbPromise;
+    await db.runAsync(
+        'UPDATE profesores SET nuevo_visto = 1 WHERE id_remoto = ?',
+        idRemoto
+    );
+}
+
 export async function guardarDocenteDetectadoEnNube(
     profesor: Omit<ProfesorLocal, 'sincronizado' | 'foto_local_uri' | 'nuevo_remoto' | 'fecha_detectado'>
 ): Promise<boolean> {
@@ -166,12 +216,6 @@ export async function guardarDocenteDetectadoEnNube(
     }>(
         'SELECT id, sincronizado FROM profesores WHERE id_remoto = ? LIMIT 1',
         profesor.id_remoto
-    ) ?? await db.getFirstAsync<{
-        id: number;
-        sincronizado: number;
-    }>(
-        'SELECT id, sincronizado FROM profesores WHERE id = ? LIMIT 1',
-        profesor.id
     );
 
     if (existente) {
@@ -196,12 +240,14 @@ export async function guardarDocenteDetectadoEnNube(
         return false;
     }
 
+    // `id` es la clave local de SQLite y `id_remoto` identifica MongoDB.
+    // No reutilizamos el ID remoto como clave local: podría colisionar con
+    // una fila local antigua aunque ese ID ya no exista en la nube.
     await db.runAsync(
         `INSERT INTO profesores
-         (id, id_remoto, nombre, foto, formacion, profesion, cargo, area,
+         (id_remoto, nombre, foto, formacion, profesion, cargo, area,
           foto_local_uri, sincronizado, nuevo_remoto, fecha_detectado)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, 1, 1, CURRENT_TIMESTAMP)`,
-        profesor.id,
+         VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 1, 1, CURRENT_TIMESTAMP)`,
         profesor.id_remoto,
         profesor.nombre,
         profesor.foto,
