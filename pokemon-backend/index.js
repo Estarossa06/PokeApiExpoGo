@@ -40,7 +40,10 @@ const PORT = 3000;
 
 app.use(cors());
 app.use(express.json());
-app.use('/api/ai', createAiRouter());
+app.use('/api/ai', createAiRouter({
+  pool,
+  dragonballApiUrl: process.env.DRAGONBALL_API_URL,
+}));
 
 /**
  * @swagger

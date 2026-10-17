@@ -5,11 +5,22 @@ import { afterEach, test } from 'node:test';
 import { createAiRouter } from '../ai-chat.js';
 
 const servers = new Set();
+const pokemonPool = {
+  query: async () => ({
+    rows: [{
+      id: 1,
+      name: 'Bulbasaur',
+      height: 7,
+      weight: 69,
+      image: 'https://example.test/bulbasaur.png',
+    }],
+  }),
+};
 
 async function withServer(options, run) {
   const app = express();
   app.use(express.json());
-  app.use('/api/ai', createAiRouter(options));
+  app.use('/api/ai', createAiRouter({ pool: pokemonPool, ...options }));
 
   const server = app.listen(0, '127.0.0.1');
   servers.add(server);
@@ -17,7 +28,7 @@ async function withServer(options, run) {
 
   try {
     const { port } = server.address();
-    await run(`http://127.0.0.1:${port}/api/ai/chat`);
+    await run(`http://127.0.0.1:${port}/api/ai/database-chat`);
   } finally {
     server.close();
     servers.delete(server);
@@ -56,10 +67,11 @@ test('sends conversation to Gemini and returns only the generated text', async (
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          domain: 'pokemon',
           messages: [
-            { role: 'user', content: 'Hola' },
-            { role: 'assistant', content: '¿Cómo estás?' },
-            { role: 'user', content: 'Bien, gracias' },
+            { role: 'user', content: '¿Qué datos tienes de Bulbasaur?' },
+            { role: 'assistant', content: 'Veo su ficha.' },
+            { role: 'user', content: 'Cuéntame sobre Bulbasaur.' },
           ],
         }),
       });
@@ -70,15 +82,15 @@ test('sends conversation to Gemini and returns only the generated text', async (
       assert.equal(requestUrl.includes(apiKey), false);
       assert.equal(requestOptions.headers['x-goog-api-key'], apiKey);
       assert.equal(requestOptions.signal, undefined);
-      assert.deepEqual(JSON.parse(requestOptions.body).generationConfig, {
+      const providerRequest = JSON.parse(requestOptions.body);
+      assert.deepEqual(providerRequest.generationConfig, {
         maxOutputTokens: 1024,
         thinkingConfig: { thinkingLevel: 'LOW' },
       });
-      assert.deepEqual(JSON.parse(requestOptions.body).contents, [
-        { role: 'user', parts: [{ text: 'Hola' }] },
-        { role: 'model', parts: [{ text: '¿Cómo estás?' }] },
-        { role: 'user', parts: [{ text: 'Bien, gracias' }] },
-      ]);
+      assert.equal(providerRequest.contents.length, 1);
+      assert.match(providerRequest.contents[0].parts[0].text, /Bulbasaur/);
+      assert.match(providerRequest.contents[0].parts[0].text, /"weight":69/);
+      assert.match(providerRequest.systemInstruction.parts[0].text, /exclusivamente/i);
     }
   );
 });
@@ -92,7 +104,10 @@ test('rejects invalid conversations without calling the provider', async () => {
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: [{ role: 'system', content: 'No' }] }),
+        body: JSON.stringify({
+          domain: 'pokemon',
+          messages: [{ role: 'system', content: 'No' }],
+        }),
       });
 
       assert.equal(response.status, 400);
@@ -106,7 +121,10 @@ test('reports missing credentials without revealing provider details', async () 
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: [{ role: 'user', content: 'Hola' }] }),
+      body: JSON.stringify({
+        domain: 'pokemon',
+        messages: [{ role: 'user', content: 'Hola' }],
+      }),
     });
 
     assert.equal(response.status, 503);
@@ -124,7 +142,10 @@ test('maps provider rate limits to a clear 429 response', async () => {
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: [{ role: 'user', content: 'Hola' }] }),
+        body: JSON.stringify({
+          domain: 'pokemon',
+          messages: [{ role: 'user', content: '¿Qué datos tienes de Bulbasaur?' }],
+        }),
       });
 
       assert.equal(response.status, 429);
@@ -147,7 +168,10 @@ test('maps upstream timeouts to a gateway timeout', async () => {
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: [{ role: 'user', content: 'Hola' }] }),
+        body: JSON.stringify({
+          domain: 'pokemon',
+          messages: [{ role: 'user', content: '¿Qué datos tienes de Bulbasaur?' }],
+        }),
       });
 
       assert.equal(response.status, 504);
@@ -178,7 +202,8 @@ test('limits requests per IP before calling the provider again', async () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            messages: [{ role: 'user', content: 'Hola' }],
+            domain: 'pokemon',
+            messages: [{ role: 'user', content: '¿Qué datos tienes de Bulbasaur?' }],
           }),
         });
 
@@ -211,13 +236,103 @@ test('does not fall back to another model when Gemini is unavailable', async () 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: [{ role: 'user', content: 'Hola' }],
+          domain: 'pokemon',
+          messages: [{ role: 'user', content: '¿Qué datos tienes de Bulbasaur?' }],
         }),
       });
 
       assert.equal(response.status, 502);
       assert.equal(providerCalls, 1);
       assert.match(requestUrl, /models\/gemini-3\.5-flash-lite:generateContent$/);
+    }
+  );
+});
+
+test('does not call Gemini when the selected database has no matching record', async () => {
+  let providerCalls = 0;
+
+  await withServer(
+    { apiKey: 'test-key', fetchImpl: async () => { providerCalls += 1; } },
+    async (url) => {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          domain: 'pokemon',
+          messages: [{ role: 'user', content: '¿Cuál es el peso de Pikachu?' }],
+        }),
+      });
+      const result = await response.json();
+
+      assert.equal(response.status, 200);
+      assert.match(result.reply, /no encontré/i);
+      assert.equal(providerCalls, 0);
+    }
+  );
+});
+
+test('reports missing attributes without asking Gemini to invent them', async () => {
+  let providerCalls = 0;
+
+  await withServer(
+    { apiKey: 'test-key', fetchImpl: async () => { providerCalls += 1; } },
+    async (url) => {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          domain: 'pokemon',
+          messages: [{ role: 'user', content: '¿Qué color tiene Bulbasaur?' }],
+        }),
+      });
+      const result = await response.json();
+
+      assert.equal(response.status, 200);
+      assert.match(result.reply, /no está disponible/i);
+      assert.equal(providerCalls, 0);
+    }
+  );
+});
+
+test('Dragon Ball requests use only the first-party Dragon Ball data service', async () => {
+  let dataUrl;
+  let providerRequest;
+
+  await withServer(
+    {
+      apiKey: 'test-key',
+      pool: { query: async () => { throw new Error('Pokémon DB must not be queried'); } },
+      dataFetchImpl: async (url) => {
+        dataUrl = url;
+        return new Response(
+          JSON.stringify([{ id: 1, name: 'Goku', race: 'Saiyan', gender: 'Male', image: 'goku.png' }]),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      },
+      fetchImpl: async (_url, options) => {
+        providerRequest = JSON.parse(options.body);
+        return new Response(
+          JSON.stringify({
+            candidates: [{ content: { parts: [{ text: 'En la base figura Goku, raza Saiyan.' }] } }],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      },
+    },
+    async (url) => {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          domain: 'dragonball',
+          messages: [{ role: 'user', content: 'Háblame de Goku.' }],
+        }),
+      });
+
+      assert.equal(response.status, 200);
+      assert.match(dataUrl, /dragonball-python-bpao\.onrender\.com\/api\/characters$/);
+      assert.match(providerRequest.contents[0].parts[0].text, /"race":"Saiyan"/);
+      assert.match(providerRequest.systemInstruction.parts[0].text, /exclusivamente/i);
     }
   );
 });

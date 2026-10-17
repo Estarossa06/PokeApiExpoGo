@@ -1,4 +1,5 @@
 export type ChatRole = 'user' | 'assistant';
+export type ChatDomain = 'pokemon' | 'dragonball';
 
 export interface ChatTurn {
   role: ChatRole;
@@ -14,14 +15,17 @@ const API_BASE_URL =
   process.env.EXPO_PUBLIC_AI_API_URL ??
   'https://pokemon-backend-rfz3.onrender.com';
 
-export async function sendChatMessage(messages: ChatTurn[]): Promise<string> {
+export async function sendChatMessage(
+  messages: ChatTurn[],
+  domain: ChatDomain
+): Promise<string> {
   try {
     const response = await fetch(
-      `${API_BASE_URL.replace(/\/+$/, '')}/api/ai/chat`,
+      `${API_BASE_URL.replace(/\/+$/, '')}/api/ai/database-chat`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages }),
+        body: JSON.stringify({ domain, messages }),
       }
     );
     const result: ChatResponse | null = await response

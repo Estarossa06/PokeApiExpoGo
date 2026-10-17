@@ -12,7 +12,11 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { sendChatMessage, type ChatTurn } from '../../services/ai';
+import {
+  sendChatMessage,
+  type ChatDomain,
+  type ChatTurn,
+} from '../../services/ai';
 
 interface Message extends ChatTurn {
   id: string;
@@ -22,6 +26,7 @@ interface Message extends ChatTurn {
 const MAX_MESSAGE_LENGTH = 4000;
 
 export default function IaScreen() {
+  const [domain, setDomain] = useState<ChatDomain>('pokemon');
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState('');
   const [loading, setLoading] = useState(false);
@@ -46,7 +51,7 @@ export default function IaScreen() {
         .filter((message) => !message.failed)
         .slice(-20)
         .map(({ role, content }) => ({ role, content }));
-      const reply = await sendChatMessage(conversation);
+      const reply = await sendChatMessage(conversation, domain);
       setMessages((current) => [
         ...current,
         { id: `${Date.now()}-assistant`, role: 'assistant', content: reply },
@@ -70,6 +75,13 @@ export default function IaScreen() {
     }
   };
 
+  const selectDomain = (nextDomain: ChatDomain) => {
+    if (loading || nextDomain === domain) return;
+    setDomain(nextDomain);
+    setMessages([]);
+    setDraft('');
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.screen}
@@ -81,11 +93,54 @@ export default function IaScreen() {
         </View>
         <View style={styles.headerCopy}>
           <Text style={styles.title}>Asistente IA</Text>
-          <Text style={styles.subtitle}>Gemini 3.8 Flash</Text>
+          <Text style={styles.subtitle}>
+            {domain === 'pokemon' ? 'Pokémon · PostgreSQL' : 'Dragon Ball · MongoDB'}
+          </Text>
         </View>
       </View>
 
       <View style={styles.chatColumn}>
+        <View style={styles.domainSwitch} accessibilityRole="tablist">
+          <Pressable
+            accessibilityRole="tab"
+            accessibilityState={{ selected: domain === 'pokemon' }}
+            disabled={loading}
+            onPress={() => selectDomain('pokemon')}
+            style={[
+              styles.domainOption,
+              domain === 'pokemon' && styles.domainOptionActive,
+            ]}
+          >
+            <Text
+              style={[
+                styles.domainOptionText,
+                domain === 'pokemon' && styles.domainOptionTextActive,
+              ]}
+            >
+              Pokémon
+            </Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="tab"
+            accessibilityState={{ selected: domain === 'dragonball' }}
+            disabled={loading}
+            onPress={() => selectDomain('dragonball')}
+            style={[
+              styles.domainOption,
+              domain === 'dragonball' && styles.domainOptionActive,
+            ]}
+          >
+            <Text
+              style={[
+                styles.domainOptionText,
+                domain === 'dragonball' && styles.domainOptionTextActive,
+              ]}
+            >
+              Dragon Ball
+            </Text>
+          </Pressable>
+        </View>
+
         <ScrollView
           ref={scrollRef}
           style={styles.messages}
@@ -106,7 +161,7 @@ export default function IaScreen() {
               </View>
               <Text style={styles.emptyTitle}>¿Qué te gustaría saber?</Text>
               <Text style={styles.emptyCopy}>
-                Escribe una pregunta para iniciar la conversación.
+                Pregunta por un registro guardado en {domain === 'pokemon' ? 'Pokémon' : 'Dragon Ball'}.
               </Text>
             </View>
           ) : (
@@ -249,6 +304,36 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 6,
+  },
+  domainSwitch: {
+    width: '100%',
+    minHeight: 46,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    padding: 4,
+    marginBottom: 8,
+    borderRadius: 14,
+    backgroundColor: '#EFE3E5',
+  },
+  domainOption: {
+    flex: 1,
+    minHeight: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+    borderRadius: 11,
+  },
+  domainOptionActive: {
+    backgroundColor: '#FFFFFF',
+  },
+  domainOptionText: {
+    color: '#75686B',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  domainOptionTextActive: {
+    color: '#7D1D2A',
   },
   messages: {
     flex: 1,
