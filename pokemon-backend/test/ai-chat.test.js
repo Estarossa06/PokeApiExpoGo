@@ -90,7 +90,7 @@ test('sends conversation to Gemini and returns only the generated text', async (
       assert.equal(providerRequest.contents.length, 1);
       assert.match(providerRequest.contents[0].parts[0].text, /Bulbasaur/);
       assert.match(providerRequest.contents[0].parts[0].text, /"weight":69/);
-      assert.match(providerRequest.systemInstruction.parts[0].text, /conocimiento general/i);
+      assert.match(providerRequest.systemInstruction.parts[0].text, /solo los valores del registro/i);
       assert.match(providerRequest.systemInstruction.parts[0].text, /No uses herramientas/i);
     }
   );
@@ -297,7 +297,7 @@ test('uses only the current question and record after an unlisted Pokemon was as
           messages: [
             { role: 'user', content: '¿Qué tipo es Ditto?' },
             { role: 'assistant', content: 'No encontré ese registro en la base de datos.' },
-            { role: 'user', content: '¿Qué tipo tiene Bulbasaur?' },
+            { role: 'user', content: '¿Cuánto pesa Bulbasaur?' },
           ],
         }),
       });
@@ -306,6 +306,7 @@ test('uses only the current question and record after an unlisted Pokemon was as
       assert.match(providerRequest.contents[0].parts[0].text, /Pregunta actual.*Bulbasaur/i);
       assert.doesNotMatch(providerRequest.contents[0].parts[0].text, /Ditto/i);
       assert.match(providerRequest.contents[0].parts[0].text, /"name":"Bulbasaur"/);
+      assert.match(providerRequest.systemInstruction.parts[0].text, /solo los valores del registro/i);
       assert.doesNotMatch(providerRequest.systemInstruction.parts[0].text, /Ditto/i);
     }
   );
@@ -337,13 +338,10 @@ test('does not resolve an unlisted current Pokemon from a previous listed Pokemo
   );
 });
 
-test('does not provide information about an unlisted Pokemon across three linked questions', async () => {
+test('uses only stored attributes and never calls Gemini for missing data in three linked questions', async () => {
   let providerCalls = 0;
   const conversation = [];
-  const generatedReplies = [
-    'Bulbasaur es de tipo Planta y Veneno.',
-    'Bulbasaur mide 0.7 metros.',
-  ];
+  const generatedReplies = ['Bulbasaur pesa 69 hectogramos.'];
 
   await withServer(
     {
@@ -382,31 +380,23 @@ test('does not provide information about an unlisted Pokemon across three linked
         conversation.push({ role: 'assistant', content: result.reply });
       }
 
-      assert.match(replies[0], /Bulbasaur.*Planta y Veneno/i);
-      assert.match(replies[1], /Bulbasaur.*0\.7 metros/i);
+      assert.match(replies[0], /ese dato no está disponible en la base de datos/i);
+      assert.match(replies[1], /Bulbasaur pesa 69 hectogramos/i);
       assert.match(replies[2], /no encontré ese registro/i);
       assert.doesNotMatch(replies[2], /tipo|transform|estadísticas|habilidad/i);
-      assert.equal(providerCalls, 2);
+      assert.equal(providerCalls, 1);
     }
   );
 });
 
-test('allows model knowledge for an attribute missing from the database record', async () => {
+test('does not call Gemini for an attribute missing from the database record', async () => {
   let providerCalls = 0;
-  let providerRequest;
 
   await withServer(
     {
       apiKey: 'test-key',
-      fetchImpl: async (_url, options) => {
+      fetchImpl: async () => {
         providerCalls += 1;
-        providerRequest = JSON.parse(options.body);
-        return new Response(
-          JSON.stringify({
-            candidates: [{ content: { parts: [{ text: 'Bulbasaur es verde.' }] } }],
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } }
-        );
       },
     },
     async (url) => {
@@ -415,17 +405,14 @@ test('allows model knowledge for an attribute missing from the database record',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           domain: 'pokemon',
-          messages: [{ role: 'user', content: '¿Qué color tiene Bulbasaur?' }],
+          messages: [{ role: 'user', content: '¿Qué tipo tiene Bulbasaur?' }],
         }),
       });
       const result = await response.json();
 
       assert.equal(response.status, 200);
-      assert.equal(result.reply, 'Bulbasaur es verde.');
-      assert.equal(providerCalls, 1);
-      assert.match(providerRequest.contents[0].parts[0].text, /"name":"Bulbasaur"/);
-      assert.match(providerRequest.systemInstruction.parts[0].text, /conocimiento general/i);
-      assert.match(providerRequest.systemInstruction.parts[0].text, /No uses herramientas/i);
+      assert.match(result.reply, /ese dato no está disponible en la base de datos/i);
+      assert.equal(providerCalls, 0);
     }
   );
 });
@@ -468,7 +455,7 @@ test('Dragon Ball requests use only the first-party Dragon Ball data service', a
       assert.equal(response.status, 200);
       assert.match(dataUrl, /dragonball-python-bpao\.onrender\.com\/api\/characters$/);
       assert.match(providerRequest.contents[0].parts[0].text, /"race":"Saiyan"/);
-      assert.match(providerRequest.systemInstruction.parts[0].text, /conocimiento general/i);
+      assert.match(providerRequest.systemInstruction.parts[0].text, /solo los valores del registro/i);
     }
   );
 });
