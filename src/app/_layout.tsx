@@ -6,6 +6,7 @@ import { DragonBallProvider } from '../context/DragonBallContext';
 import { PokemonProvider } from '../context/PokemonContext';
 import { ProfesoresProvider } from '../context/ProfesoresContext';
 import { inicializarDB } from '../database/profesoresSQLite';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 export default function RootLayout() {
   const [dbLista, setDbLista] = useState(false);
@@ -39,15 +40,17 @@ export default function RootLayout() {
   }
 
   return (
-    <PokemonProvider>
-      <DragonBallProvider>
-        <ProfesoresProvider>
-          <Stack>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          </Stack>
-        </ProfesoresProvider>
-      </DragonBallProvider>
-    </PokemonProvider>
+    <SafeAreaProvider>
+      <PokemonProvider>
+        <DragonBallProvider>
+          <ProfesoresProvider>
+            <Stack>
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            </Stack>
+          </ProfesoresProvider>
+        </DragonBallProvider>
+      </PokemonProvider>
+    </SafeAreaProvider>
   );
 }
 

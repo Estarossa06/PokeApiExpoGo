@@ -12,6 +12,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   sendChatMessage,
   type ChatDomain,
@@ -87,7 +88,7 @@ export default function IaScreen() {
       style={styles.screen}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <View style={styles.header}>
+      <SafeAreaView edges={['top']} style={styles.header}>
         <View style={styles.avatar}>
           <MaterialCommunityIcons name="robot-outline" size={25} color="#FFFFFF" />
         </View>
@@ -97,7 +98,7 @@ export default function IaScreen() {
             {domain === 'pokemon' ? 'Pokémon · PostgreSQL' : 'Dragon Ball · MongoDB'}
           </Text>
         </View>
-      </View>
+      </SafeAreaView>
 
       <View style={styles.chatColumn}>
         <View style={styles.domainSwitch} accessibilityRole="tablist">
