@@ -4,6 +4,7 @@ import pg from 'pg';
 import dotenv from 'dotenv';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
+import { createAiRouter } from './ai-chat.js';
 
 dotenv.config();
 
@@ -17,6 +18,7 @@ const pool = new Pool({
 });
 
 const app = express(); 
+app.set('trust proxy', 1);
 
 const swaggerOptions = {
   definition: {
@@ -38,6 +40,7 @@ const PORT = 3000;
 
 app.use(cors());
 app.use(express.json());
+app.use('/api/ai', createAiRouter());
 
 /**
  * @swagger

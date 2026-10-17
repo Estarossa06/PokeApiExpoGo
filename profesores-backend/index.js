@@ -736,6 +736,20 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      const dedupKey = claveUnicaProfesor(datos);
+      const duplicado = await profesores.findOne({
+        dedupKey,
+        id: { $ne: idNumero }
+      });
+
+      if (duplicado) {
+        res.statusCode = 409;
+        res.end(JSON.stringify({
+          error: 'Otro profesor ya tiene estos datos, excepto la foto'
+        }));
+        return;
+      }
+
       // Datos actualizados
       const profesorActualizado = {
         id: idNumero,
@@ -745,7 +759,7 @@ const server = http.createServer(async (req, res) => {
         profesion: datos.profesion.trim(),
         cargo: datos.cargo.trim(),
         area: datos.area.trim(),
-        dedupKey: claveUnicaProfesor(datos)
+        dedupKey
       };
 
       // Actualizar el documento en MongoDB

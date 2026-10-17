@@ -387,8 +387,21 @@ export function ProfesoresProvider({
           }
 
           if (op.operacion === 'UPDATE') {
+            const eliminacionPosterior = operaciones.find(
+              (pendiente) =>
+                pendiente.id > op.id &&
+                pendiente.profesor_id === op.profesor_id &&
+                pendiente.operacion === 'DELETE'
+            );
+            const datosEliminacion = eliminacionPosterior?.datos
+              ? JSON.parse(eliminacionPosterior.datos) as {
+                  id_remoto?: number | null;
+                }
+              : null;
             const idRemoto =
               local?.id_remoto ??
+              datos?.id_remoto ??
+              datosEliminacion?.id_remoto ??
               (datos?.id > 0 ? datos.id : null);
 
             if (idRemoto == null) {
@@ -458,7 +471,15 @@ export function ProfesoresProvider({
   }, [cargarRecientes]);
 
   useEffect(() => {
-    cargarRecientes().catch((e) => console.warn('Error cargando historial:', e));
+    let activo = true;
+
+    void obtenerDocentesRecientes()
+      .then((recientes) => {
+        if (activo) {
+          setDocentesRecientes(recientes.map(convertirLocal));
+        }
+      })
+      .catch((e) => console.warn('Error cargando historial:', e));
 
     const sincronizarAlConectar = async () => {
       if (reconexionEnCurso.current) return;
@@ -484,7 +505,10 @@ export function ProfesoresProvider({
       }
     });
 
-    return unsubscribe;
+    return () => {
+      activo = false;
+      unsubscribe();
+    };
   }, [cargarRecientes, sincronizar, consultarCambiosNube]);
 
   useEffect(() => {
@@ -726,7 +750,13 @@ export function ProfesoresProvider({
           });
 
           if (!respuesta.ok) {
-            setError('No se pudo actualizar en el servidor');
+            const resultado: { error?: unknown } | null =
+              await respuesta.json().catch(() => null);
+            setError(
+              typeof resultado?.error === 'string'
+                ? resultado.error
+                : 'No se pudo actualizar en el servidor'
+            );
             return false;
           }
 
@@ -774,7 +804,12 @@ export function ProfesoresProvider({
       await registrarOperacionPendiente(
         'UPDATE',
         idLocal,
-        { ...profesorParaActualizar, id: idLocal }
+        {
+          ...profesorParaActualizar,
+          id: idLocal,
+          id_remoto:
+            local?.id_remoto ?? (profesor.id > 0 ? profesor.id : null),
+        }
       );
 
       setProfesor((actuales) =>

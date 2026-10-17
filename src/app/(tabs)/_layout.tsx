@@ -1,9 +1,9 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
+import { DarkTheme, DefaultTheme, Tabs, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useColorScheme } from 'react-native';
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import { Tabs } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -104,6 +104,21 @@ export default function TabLayout() {
                 name="people-outline"
                 size={28}
                 color={color}
+              />
+            ),
+          }}
+        />
+
+        <Tabs.Screen
+          name="ia"
+          options={{
+            title: 'IA',
+            headerShown: false,
+            tabBarIcon: ({ color, size }) => (
+              <MaterialCommunityIcons
+                name="robot-outline"
+                color={color}
+                size={size ?? 24}
               />
             ),
           }}

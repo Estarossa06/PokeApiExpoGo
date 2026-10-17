@@ -1,6 +1,4 @@
-
 import * as SQLite from 'expo-sqlite';
-
 
 export interface ProfesorLocal {
     id: number;
