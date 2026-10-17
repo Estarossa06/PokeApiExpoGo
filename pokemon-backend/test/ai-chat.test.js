@@ -272,6 +272,125 @@ test('does not call Gemini when the selected database has no matching record', a
   );
 });
 
+test('uses only the current question and record after an unlisted Pokemon was asked about', async () => {
+  let providerRequest;
+
+  await withServer(
+    {
+      apiKey: 'test-key',
+      fetchImpl: async (_url, options) => {
+        providerRequest = JSON.parse(options.body);
+        return new Response(
+          JSON.stringify({
+            candidates: [{ content: { parts: [{ text: 'Bulbasaur es de tipo Planta y Veneno.' }] } }],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      },
+    },
+    async (url) => {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          domain: 'pokemon',
+          messages: [
+            { role: 'user', content: '¿Qué tipo es Ditto?' },
+            { role: 'assistant', content: 'No encontré ese registro en la base de datos.' },
+            { role: 'user', content: '¿Qué tipo tiene Bulbasaur?' },
+          ],
+        }),
+      });
+
+      assert.equal(response.status, 200);
+      assert.match(providerRequest.contents[0].parts[0].text, /Pregunta actual.*Bulbasaur/i);
+      assert.doesNotMatch(providerRequest.contents[0].parts[0].text, /Ditto/i);
+      assert.match(providerRequest.contents[0].parts[0].text, /"name":"Bulbasaur"/);
+      assert.doesNotMatch(providerRequest.systemInstruction.parts[0].text, /Ditto/i);
+    }
+  );
+});
+
+test('does not resolve an unlisted current Pokemon from a previous listed Pokemon mention', async () => {
+  let providerCalls = 0;
+
+  await withServer(
+    { apiKey: 'test-key', fetchImpl: async () => { providerCalls += 1; } },
+    async (url) => {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          domain: 'pokemon',
+          messages: [
+            { role: 'user', content: '¿Qué datos tienes de Bulbasaur?' },
+            { role: 'assistant', content: 'Veo su ficha.' },
+            { role: 'user', content: '¿Qué tipo es Ditto?' },
+          ],
+        }),
+      });
+
+      assert.equal(response.status, 200);
+      assert.match((await response.json()).reply, /no encontré/i);
+      assert.equal(providerCalls, 0);
+    }
+  );
+});
+
+test('does not provide information about an unlisted Pokemon across three linked questions', async () => {
+  let providerCalls = 0;
+  const conversation = [];
+  const generatedReplies = [
+    'Bulbasaur es de tipo Planta y Veneno.',
+    'Bulbasaur mide 0.7 metros.',
+  ];
+
+  await withServer(
+    {
+      apiKey: 'test-key',
+      fetchImpl: async () => {
+        const reply = generatedReplies[providerCalls];
+        providerCalls += 1;
+        return new Response(
+          JSON.stringify({
+            candidates: [{ content: { parts: [{ text: reply }] } }],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      },
+    },
+    async (url) => {
+      const questions = [
+        '¿Qué tipo tiene Bulbasaur?',
+        '¿Qué altura tiene Bulbasaur?',
+        '¿Qué tipo tiene Ditto?',
+      ];
+      const replies = [];
+
+      for (const question of questions) {
+        conversation.push({ role: 'user', content: question });
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ domain: 'pokemon', messages: conversation }),
+        });
+        const result = await response.json();
+
+        assert.equal(response.status, 200);
+        assert.equal(typeof result.reply, 'string');
+        replies.push(result.reply);
+        conversation.push({ role: 'assistant', content: result.reply });
+      }
+
+      assert.match(replies[0], /Bulbasaur.*Planta y Veneno/i);
+      assert.match(replies[1], /Bulbasaur.*0\.7 metros/i);
+      assert.match(replies[2], /no encontré ese registro/i);
+      assert.doesNotMatch(replies[2], /tipo|transform|estadísticas|habilidad/i);
+      assert.equal(providerCalls, 2);
+    }
+  );
+});
+
 test('allows model knowledge for an attribute missing from the database record', async () => {
   let providerCalls = 0;
   let providerRequest;
