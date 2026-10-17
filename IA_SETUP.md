@@ -2,9 +2,9 @@
 
 ## Proveedor
 
-La fase inicial usa Gemini 3.8 Flash mediante la Gemini Developer API. A la fecha de implementación, la página oficial de precios indica acceso gratuito a entrada y salida de texto en el nivel Free. Los límites RPM, TPM y RPD dependen del modelo y del proyecto, cambian con el tiempo y se consultan en Google AI Studio. El nivel gratuito puede usar los datos enviados para mejorar productos de Google; no se deben enviar datos sensibles.
+La fase inicial usa Gemini 3.5 Flash-Lite mediante la Gemini Developer API. Se seleccionó porque generó respuesta de prueba con la clave configurada mientras Gemini 3.8 Flash excedía el timeout. La página oficial de precios indica acceso gratuito a entrada y salida de texto en el nivel Free. Los límites RPM, TPM y RPD dependen del modelo y del proyecto, cambian con el tiempo y se consultan en Google AI Studio. El nivel gratuito puede usar los datos enviados para mejorar productos de Google; no se deben enviar datos sensibles.
 
-La aplicación no contiene la clave. El backend la obtiene de `GEMINI_API_KEY` y la envía a Gemini como encabezado `x-goog-api-key`. El modelo está fijado en el backend a `gemini-3.8-flash`; si falla o no está disponible, se devuelve un error y no se prueba otro proveedor ni otro modelo.
+La aplicación no contiene la clave. El backend la obtiene de `GEMINI_API_KEY` y la envía a Gemini como encabezado `x-goog-api-key`. El modelo está fijado en el backend a `gemini-3.5-flash-lite`; si falla o no está disponible, se devuelve un error y no se prueba otro proveedor ni otro modelo.
 
 El endpoint limita cada IP a 10 solicitudes por minuto. El límite protege la cuota de nuestro servidor; la cuota propia del proyecto de Google sigue aplicando independientemente.
 
@@ -38,7 +38,7 @@ npm test
 
 ## Estado de verificación
 
-Las siete pruebas de `npm test` usan un `fetch` simulado; validan formato, mapeo de errores, límites y que no haya fallback, pero no se conectan a Google. La prueba HTTP local sin clave devolvió `503` como se esperaba. No hay una clave configurada, así que todavía no se ha probado una respuesta real de Gemini. La etapa 2 debe esperar hasta completar esa prueba real.
+Las siete pruebas de `npm test` usan un `fetch` simulado; validan formato, mapeo de errores, límites y que no haya fallback. En la última verificación, la llamada directa a Gemini 3.5 Flash-Lite respondió `200`, mientras que Gemini 3.8 Flash expiró. La ruta pública de Render respondió `502` durante esa comprobación, por lo que el despliegue aún debe actualizarse con el modelo más rápido y verificarse de extremo a extremo. La etapa 2 debe esperar hasta que esa prueba pase.
 
 ## Despliegue y prueba real
 

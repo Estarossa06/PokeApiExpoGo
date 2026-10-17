@@ -66,9 +66,14 @@ test('sends conversation to Gemini and returns only the generated text', async (
 
       assert.equal(response.status, 200);
       assert.deepEqual(await response.json(), { reply: 'Hola desde Gemini.' });
-      assert.match(requestUrl, /models\/gemini-3\.8-flash:generateContent$/);
+      assert.match(requestUrl, /models\/gemini-3\.5-flash-lite:generateContent$/);
       assert.equal(requestUrl.includes(apiKey), false);
       assert.equal(requestOptions.headers['x-goog-api-key'], apiKey);
+      assert.equal(requestOptions.signal, undefined);
+      assert.deepEqual(JSON.parse(requestOptions.body).generationConfig, {
+        maxOutputTokens: 1024,
+        thinkingConfig: { thinkingLevel: 'LOW' },
+      });
       assert.deepEqual(JSON.parse(requestOptions.body).contents, [
         { role: 'user', parts: [{ text: 'Hola' }] },
         { role: 'model', parts: [{ text: '¿Cómo estás?' }] },
@@ -212,7 +217,7 @@ test('does not fall back to another model when Gemini is unavailable', async () 
 
       assert.equal(response.status, 502);
       assert.equal(providerCalls, 1);
-      assert.match(requestUrl, /models\/gemini-3\.8-flash:generateContent$/);
+      assert.match(requestUrl, /models\/gemini-3\.5-flash-lite:generateContent$/);
     }
   );
 });

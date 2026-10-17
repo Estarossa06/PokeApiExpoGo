@@ -3,10 +3,9 @@ import rateLimit from 'express-rate-limit';
 
 const MAX_MESSAGES = 20;
 const MAX_MESSAGE_LENGTH = 4000;
-const REQUEST_TIMEOUT_MS = 30_000;
 const REQUESTS_PER_WINDOW = 10;
 const RATE_LIMIT_WINDOW_MS = 60_000;
-const MODEL = 'gemini-3.8-flash';
+const MODEL = 'gemini-3.5-flash-lite';
 
 export function createAiRouter({
   apiKey = process.env.GEMINI_API_KEY,
@@ -77,9 +76,11 @@ export function createAiRouter({
           },
           body: JSON.stringify({
             contents,
-            generationConfig: { maxOutputTokens: 1024 },
+            generationConfig: {
+              maxOutputTokens: 1024,
+              thinkingConfig: { thinkingLevel: 'LOW' },
+            },
           }),
-          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         }
       );
 

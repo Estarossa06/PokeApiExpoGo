@@ -15,9 +15,6 @@ const API_BASE_URL =
   'https://pokemon-backend-rfz3.onrender.com';
 
 export async function sendChatMessage(messages: ChatTurn[]): Promise<string> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 35_000);
-
   try {
     const response = await fetch(
       `${API_BASE_URL.replace(/\/+$/, '')}/api/ai/chat`,
@@ -25,7 +22,6 @@ export async function sendChatMessage(messages: ChatTurn[]): Promise<string> {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages }),
-        signal: controller.signal,
       }
     );
     const result: ChatResponse | null = await response
@@ -53,7 +49,5 @@ export async function sendChatMessage(messages: ChatTurn[]): Promise<string> {
       throw new Error('No se pudo conectar con el servicio de IA.');
     }
     throw error;
-  } finally {
-    clearTimeout(timeout);
   }
 }
