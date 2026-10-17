@@ -40,7 +40,7 @@ npm test
 
 ## Estado de verificación
 
-Las pruebas de `npm test` usan fuentes de datos y proveedor simulados; cubren separación de dominios, exclusión de registros ausentes, atributos ausentes, límites y ausencia de fallback. El selector y el cambio de dominio se verificaron en Expo Web. La ruta de fase 2 es `/api/ai/database-chat`; si la app llega a un despliegue anterior, recibirá `404` en vez de consultar el chat general de fase 1. La prueba real de esta ruta en Render queda pendiente del despliegue de estos cambios.
+Las pruebas de `npm test` usan fuentes de datos y proveedor simulados; cubren separación de dominios, exclusión de entidades ausentes, respuestas a atributos no almacenados cuando la entidad sí existe, límites y ausencia de fallback. El selector y el cambio de dominio se verificaron en Expo Web. La ruta de fase 2 es `/api/ai/database-chat`; si la app llega a un despliegue anterior, recibirá `404` en vez de consultar el chat general de fase 1. La prueba real de esta ruta en Render queda pendiente del despliegue de estos cambios.
 
 ## Despliegue y prueba real
 
