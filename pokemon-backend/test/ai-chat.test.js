@@ -90,7 +90,8 @@ test('sends conversation to Gemini and returns only the generated text', async (
       assert.equal(providerRequest.contents.length, 1);
       assert.match(providerRequest.contents[0].parts[0].text, /Bulbasaur/);
       assert.match(providerRequest.contents[0].parts[0].text, /"weight":69/);
-      assert.match(providerRequest.systemInstruction.parts[0].text, /exclusivamente/i);
+      assert.match(providerRequest.systemInstruction.parts[0].text, /conocimiento general/i);
+      assert.match(providerRequest.systemInstruction.parts[0].text, /No uses herramientas/i);
     }
   );
 });
@@ -271,11 +272,24 @@ test('does not call Gemini when the selected database has no matching record', a
   );
 });
 
-test('reports missing attributes without asking Gemini to invent them', async () => {
+test('allows model knowledge for an attribute missing from the database record', async () => {
   let providerCalls = 0;
+  let providerRequest;
 
   await withServer(
-    { apiKey: 'test-key', fetchImpl: async () => { providerCalls += 1; } },
+    {
+      apiKey: 'test-key',
+      fetchImpl: async (_url, options) => {
+        providerCalls += 1;
+        providerRequest = JSON.parse(options.body);
+        return new Response(
+          JSON.stringify({
+            candidates: [{ content: { parts: [{ text: 'Bulbasaur es verde.' }] } }],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      },
+    },
     async (url) => {
       const response = await fetch(url, {
         method: 'POST',
@@ -288,8 +302,11 @@ test('reports missing attributes without asking Gemini to invent them', async ()
       const result = await response.json();
 
       assert.equal(response.status, 200);
-      assert.match(result.reply, /no está disponible/i);
-      assert.equal(providerCalls, 0);
+      assert.equal(result.reply, 'Bulbasaur es verde.');
+      assert.equal(providerCalls, 1);
+      assert.match(providerRequest.contents[0].parts[0].text, /"name":"Bulbasaur"/);
+      assert.match(providerRequest.systemInstruction.parts[0].text, /conocimiento general/i);
+      assert.match(providerRequest.systemInstruction.parts[0].text, /No uses herramientas/i);
     }
   );
 });
@@ -332,7 +349,7 @@ test('Dragon Ball requests use only the first-party Dragon Ball data service', a
       assert.equal(response.status, 200);
       assert.match(dataUrl, /dragonball-python-bpao\.onrender\.com\/api\/characters$/);
       assert.match(providerRequest.contents[0].parts[0].text, /"race":"Saiyan"/);
-      assert.match(providerRequest.systemInstruction.parts[0].text, /exclusivamente/i);
+      assert.match(providerRequest.systemInstruction.parts[0].text, /conocimiento general/i);
     }
   );
 });

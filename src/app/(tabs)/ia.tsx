@@ -161,7 +161,7 @@ export default function IaScreen() {
               </View>
               <Text style={styles.emptyTitle}>¿Qué te gustaría saber?</Text>
               <Text style={styles.emptyCopy}>
-                Pregunta por un registro guardado en {domain === 'pokemon' ? 'Pokémon' : 'Dragon Ball'}.
+                Pregunta sobre un {domain === 'pokemon' ? 'Pokémon' : 'personaje'} registrado.
               </Text>
             </View>
           ) : (

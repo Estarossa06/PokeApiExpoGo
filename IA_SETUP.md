@@ -10,9 +10,9 @@ El endpoint limita cada IP a 10 solicitudes por minuto. El límite protege la cu
 
 ## Arquitectura
 
-`src/app/(tabs)/ia.tsx` permite elegir el dominio por separado y usa `src/services/ai.ts`. El servicio llama a `POST /api/ai/database-chat` en el backend de Pokémon. El router valida el historial, lee solo la fuente seleccionada y entrega a Gemini una única ficha encontrada. No usa herramientas de búsqueda ni las rutas de profesores.
+`src/app/(tabs)/ia.tsx` permite elegir el dominio por separado y usa `src/services/ai.ts`. El servicio llama a `POST /api/ai/database-chat` en el backend de Pokémon. El router valida el historial, lee solo la fuente seleccionada y exige que la entidad aparezca en esa base antes de llamar a Gemini. Una vez validada la identidad, Gemini puede responder preguntas relacionadas aunque el atributo no esté almacenado, usando su conocimiento entrenado. No usa herramientas de búsqueda ni APIs externas para completar la respuesta.
 
-Cada turno vuelve a leer los datos para reflejar cambios recientes. Pokémon se consulta directamente en PostgreSQL con sus campos `id`, `name`, `height`, `weight` e `image`. Dragon Ball usa únicamente el microservicio propio conectado a MongoDB y los campos guardados allí. Si no se encuentra un nombre, Gemini no se consulta; si se pide un dato o atributo no disponible, el backend informa que no está almacenado. Al cambiar de dominio, la pantalla limpia el historial para no mezclar contextos.
+Cada turno vuelve a leer los datos para reflejar cambios recientes. Pokémon se consulta directamente en PostgreSQL con sus campos `id`, `name`, `height`, `weight` e `image`. Dragon Ball usa únicamente el microservicio propio conectado a MongoDB y los campos guardados allí. Si no se encuentra un nombre, Gemini no se consulta y se indica que el registro no existe. Al cambiar de dominio, la pantalla limpia el historial para no mezclar contextos.
 
 ## Configuración local
 
@@ -40,12 +40,12 @@ npm test
 
 ## Estado de verificación
 
-Las 10 pruebas de `npm test` usan fuentes de datos y proveedor simulados; cubren separación de dominios, exclusión de registros ausentes, atributos no disponibles, límites y ausencia de fallback. El selector y el cambio de dominio se verificaron en Expo Web. La ruta de fase 2 es `/api/ai/database-chat`; si la app llega a un despliegue anterior, recibirá `404` en vez de consultar el chat general de fase 1. La prueba real de la nueva ruta en Render queda pendiente del despliegue de estos cambios.
+Las pruebas de `npm test` usan fuentes de datos y proveedor simulados; cubren separación de dominios, exclusión de registros ausentes, atributos ausentes, límites y ausencia de fallback. El selector y el cambio de dominio se verificaron en Expo Web. La ruta de fase 2 es `/api/ai/database-chat`; si la app llega a un despliegue anterior, recibirá `404` en vez de consultar el chat general de fase 1. La prueba real de esta ruta en Render queda pendiente del despliegue de estos cambios.
 
 ## Despliegue y prueba real
 
 El backend de Pokémon existente está publicado en Render. Al desplegar estos cambios en ese servicio, configura `GEMINI_API_KEY` como secreto y `DRAGONBALL_API_URL` con el microservicio propio de Dragon Ball si cambia su URL. La app usa por defecto `https://pokemon-backend-rfz3.onrender.com`; la prueba real de fase 2 requiere desplegar la ruta `/api/ai/database-chat`.
 
-Las consultas de fase 2 no acceden a bases de terceros, buscadores ni datos de profesores. Pokémon se consulta directamente en PostgreSQL; Dragon Ball se lee mediante el microservicio propio conectado a MongoDB. La cuota de Gemini puede agotarse y sus límites no son garantía de disponibilidad.
+Las consultas de fase 2 no acceden a buscadores, APIs de terceros ni datos de profesores. La base propia valida la entidad y delimita el dominio; Gemini puede usar su conocimiento entrenado para contestar preguntas relacionadas, pero no se conecta a fuentes externas. La cuota puede agotarse y sus límites no son garantía de disponibilidad.
 
 El límite actual es por IP, no por cuenta de usuario. El endpoint tampoco tiene autenticación; antes de anunciarlo públicamente, protégelo con autenticación para evitar consumo no autorizado de la cuota del proyecto.
