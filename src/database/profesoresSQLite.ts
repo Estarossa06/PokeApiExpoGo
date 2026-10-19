@@ -1,4 +1,9 @@
 import * as SQLite from 'expo-sqlite';
+import {
+    createSQLiteTaskQueue,
+    deleteMissingSynchronizedProfessors,
+    getOrCreateSQLiteRuntime,
+} from './sqliteSerial';
 
 export interface ProfesorLocal {
     id: number;
@@ -18,9 +23,17 @@ export interface ProfesorLocal {
 
 export type IntervaloMonitoreo = 2 | 10 | 30;
 
-export const dbPromise = SQLite.openDatabaseAsync('pokeanime.db');
+const runtimeGlobal = globalThis as unknown as Record<string, unknown>;
+const runtime = getOrCreateSQLiteRuntime(runtimeGlobal, '__pokeanimeProfesoresSQLiteRuntime__', () => ({
+    dbPromise: SQLite.openDatabaseAsync('pokeanime.db'),
+    ejecutarSQLite: createSQLiteTaskQueue(),
+}));
 
-export async function inicializarDB() {
+export const dbPromise = runtime.dbPromise;
+const ejecutarSQLite = runtime.ejecutarSQLite;
+
+export function inicializarDB() {
+    return ejecutarSQLite(async () => {
     const db = await dbPromise;
 
     await db.execAsync(`
@@ -106,11 +119,12 @@ export async function inicializarDB() {
       valor TEXT NOT NULL
     );
   `);
-
+    });
 }
 
 // Persistencia del intervalo: conserva la selección del usuario entre reinicios.
-export async function obtenerIntervaloMonitoreo(): Promise<IntervaloMonitoreo> {
+export function obtenerIntervaloMonitoreo(): Promise<IntervaloMonitoreo> {
+    return ejecutarSQLite(async () => {
     const db = await dbPromise;
     const preferencia = await db.getFirstAsync<{ valor: string }>(
         'SELECT valor FROM preferencias_app WHERE clave = ?',
@@ -119,11 +133,13 @@ export async function obtenerIntervaloMonitoreo(): Promise<IntervaloMonitoreo> {
     const valor = Number(preferencia?.valor);
 
     return valor === 2 || valor === 10 || valor === 30 ? valor : 10;
+    });
 }
 
-export async function guardarIntervaloMonitoreo(
+export function guardarIntervaloMonitoreo(
     segundos: IntervaloMonitoreo
 ): Promise<void> {
+    return ejecutarSQLite(async () => {
     const db = await dbPromise;
     await db.runAsync(
         `INSERT INTO preferencias_app (clave, valor)
@@ -132,51 +148,41 @@ export async function guardarIntervaloMonitoreo(
         'intervalo_monitoreo',
         String(segundos)
     );
+    });
 }
 
-export async function obtenerProfesores(): Promise<ProfesorLocal[]> {
+export function obtenerProfesores(): Promise<ProfesorLocal[]> {
+    return ejecutarSQLite(async () => {
     const db = await dbPromise;
 
     return db.getAllAsync<ProfesorLocal>(
         'SELECT * FROM profesores ORDER BY id'
     );
+    });
 }
 
-export async function obtenerDocentesRecientes(): Promise<ProfesorLocal[]> {
+export function obtenerDocentesRecientes(): Promise<ProfesorLocal[]> {
+    return ejecutarSQLite(async () => {
     const db = await dbPromise;
     return db.getAllAsync<ProfesorLocal>(
         `SELECT * FROM profesores
          WHERE nuevo_remoto = 1
          ORDER BY datetime(fecha_detectado) DESC, id DESC`
     );
+    });
 }
 
 /**
  * Elimina de SQLite los registros sincronizados que ya no están en la nube.
  * Conserva las filas con cambios locales pendientes.
  */
-export async function eliminarProfesoresSincronizadosAusentes(
+export function eliminarProfesoresSincronizadosAusentes(
     idsRemotosExistentes: number[]
 ): Promise<void> {
-    const db = await dbPromise;
-
-    if (idsRemotosExistentes.length === 0) {
-        await db.runAsync(
-            `DELETE FROM profesores
-             WHERE sincronizado = 1
-               AND id_remoto IS NOT NULL`
-        );
-        return;
-    }
-
-    const placeholders = idsRemotosExistentes.map(() => '?').join(', ');
-    await db.runAsync(
-        `DELETE FROM profesores
-         WHERE sincronizado = 1
-           AND id_remoto IS NOT NULL
-           AND id_remoto NOT IN (${placeholders})`,
-        ...idsRemotosExistentes
-    );
+    return ejecutarSQLite(async () => {
+        const db = await dbPromise;
+        await deleteMissingSynchronizedProfessors(db, idsRemotosExistentes);
+    });
 }
 
 /**
@@ -186,7 +192,8 @@ export async function eliminarProfesoresSincronizadosAusentes(
 /** Marca como reciente una creación local que acaba de sincronizarse.
  * Se invoca desde el sondeo, no en el momento de la creación.
  */
-export async function marcarDocenteComoReciente(idRemoto: number): Promise<void> {
+export function marcarDocenteComoReciente(idRemoto: number): Promise<void> {
+    return ejecutarSQLite(async () => {
     const db = await dbPromise;
     await db.runAsync(
         `UPDATE profesores
@@ -194,19 +201,23 @@ export async function marcarDocenteComoReciente(idRemoto: number): Promise<void>
          WHERE id_remoto = ?`,
         idRemoto
     );
+    });
 }
 
-export async function marcarDocenteNuevoComoVisto(idRemoto: number): Promise<void> {
+export function marcarDocenteNuevoComoVisto(idRemoto: number): Promise<void> {
+    return ejecutarSQLite(async () => {
     const db = await dbPromise;
     await db.runAsync(
         'UPDATE profesores SET nuevo_visto = 1 WHERE id_remoto = ?',
         idRemoto
     );
+    });
 }
 
-export async function guardarDocenteDetectadoEnNube(
+export function guardarDocenteDetectadoEnNube(
     profesor: Omit<ProfesorLocal, 'sincronizado' | 'foto_local_uri' | 'nuevo_remoto' | 'fecha_detectado'>
 ): Promise<boolean> {
+    return ejecutarSQLite(async () => {
     const db = await dbPromise;
     const existente = await db.getFirstAsync<{
         id: number;
@@ -255,12 +266,14 @@ export async function guardarDocenteDetectadoEnNube(
         profesor.area
     );
     return true;
+    });
 }
 
 
-export async function guardarProfesorLocal(
+export function guardarProfesorLocal(
     profesor: Omit<ProfesorLocal, 'sincronizado'>
 ) {
+    return ejecutarSQLite(async () => {
     const db = await dbPromise;
 
     await db.runAsync(
@@ -287,6 +300,7 @@ export async function guardarProfesorLocal(
         profesor.area,
         profesor.foto_local_uri
     );
+    });
 }
 
 export async function actualizarProfesorLocal(
@@ -295,13 +309,15 @@ export async function actualizarProfesorLocal(
     await guardarProfesorLocal(profesor);
 }
 
-export async function eliminarProfesorLocal(id: number) {
+export function eliminarProfesorLocal(id: number) {
+    return ejecutarSQLite(async () => {
     const db = await dbPromise;
 
     await db.runAsync(
         'DELETE FROM profesores WHERE id = ?',
         id
     );
+    });
 }
 
 
@@ -313,13 +329,12 @@ export type OperacionPendiente = {
     fecha: string;
 };
 
-export async function registrarOperacionPendiente(
+async function registrarOperacionPendienteEnDB(
+    db: Awaited<typeof dbPromise>,
     operacion: OperacionPendiente['operacion'],
     profesorId: number,
     datos?: object
 ) {
-    const db = await dbPromise;
-
     await db.runAsync(
         `INSERT INTO sincronizacion_pendiente
       (operacion, profesor_id, datos)
@@ -330,46 +345,62 @@ export async function registrarOperacionPendiente(
     );
 }
 
-export async function obtenerOperacionesPendientes(): Promise<OperacionPendiente[]> {
+export function registrarOperacionPendiente(
+    operacion: OperacionPendiente['operacion'],
+    profesorId: number,
+    datos?: object
+) {
+    return ejecutarSQLite(async () =>
+        registrarOperacionPendienteEnDB(await dbPromise, operacion, profesorId, datos)
+    );
+}
+
+export function obtenerOperacionesPendientes(): Promise<OperacionPendiente[]> {
+    return ejecutarSQLite(async () => {
     const db = await dbPromise;
 
     return db.getAllAsync<OperacionPendiente>(
         'SELECT * FROM sincronizacion_pendiente ORDER BY id'
     );
+    });
 }
 
-export async function completarOperacionPendiente(id: number) {
+export function completarOperacionPendiente(id: number) {
+    return ejecutarSQLite(async () => {
     const db = await dbPromise;
 
     await db.runAsync(
         'DELETE FROM sincronizacion_pendiente WHERE id = ?',
         id
     );
+    });
 }
 
-export async function marcarProfesorSincronizado(id: number) {
+export function marcarProfesorSincronizado(id: number) {
+    return ejecutarSQLite(async () => {
     const db = await dbPromise;
 
     await db.runAsync(
         'UPDATE profesores SET sincronizado = 1 WHERE id = ?',
         id
     );
+    });
 }
 
 
-export async function crearProfesorOffline(
+export function crearProfesorOffline(
     profesor: Omit<ProfesorLocal, 'id' | 'id_remoto' | 'sincronizado'>
 ): Promise<number> {
+    return ejecutarSQLite(async () => {
     const db = await dbPromise;
+    let idLocal = -1;
 
-    await db.execAsync('BEGIN TRANSACTION');
-
-    try {
+    await db.withTransactionAsync(async () => {
         const resultado = await db.getFirstAsync<{ siguiente: number }>(
             'SELECT MIN(id) - 1 AS siguiente FROM profesores WHERE id < 0'
         );
 
-        const idLocal = resultado?.siguiente ?? -1;
+        idLocal = resultado?.siguiente ?? -1;
 
         await db.runAsync(
             `INSERT INTO profesores
@@ -385,24 +416,22 @@ export async function crearProfesorOffline(
             profesor.foto_local_uri
         );
 
-        await registrarOperacionPendiente(
+        await registrarOperacionPendienteEnDB(
+            db,
             'CREATE',
             idLocal,
             { ...profesor, id: idLocal }
         );
+    });
 
-        await db.execAsync('COMMIT');
-
-        return idLocal;
-    } catch (error) {
-        await db.execAsync('ROLLBACK');
-        throw error;
-    }
+    return idLocal;
+    });
 }
 
-export async function guardarProfesorDescargado(
+export function guardarProfesorDescargado(
     profesor: Omit<ProfesorLocal, 'sincronizado' | 'foto_local_uri'>
 ) {
+    return ejecutarSQLite(async () => {
     const db = await dbPromise;
 
     await db.runAsync(
@@ -428,12 +457,14 @@ export async function guardarProfesorDescargado(
         profesor.cargo,
         profesor.area
     );
+    });
 }
 
-export async function actualizarIdRemotoProfesor(
+export function actualizarIdRemotoProfesor(
   idLocal: number,
   idRemoto: number
 ) {
+  return ejecutarSQLite(async () => {
   const db = await dbPromise;
 
   await db.runAsync(
@@ -443,9 +474,10 @@ export async function actualizarIdRemotoProfesor(
     idRemoto,
     idLocal
   );
+  });
 }
 
-export async function vincularProfesorConRemoto(
+export function vincularProfesorConRemoto(
     idLocal: number,
     profesorRemoto: Pick<
         ProfesorLocal,
@@ -453,11 +485,9 @@ export async function vincularProfesorConRemoto(
     >,
     marcarReciente = false
 ): Promise<void> {
+    return ejecutarSQLite(async () => {
     const db = await dbPromise;
-
-    await db.execAsync('BEGIN TRANSACTION');
-
-    try {
+    await db.withTransactionAsync(async () => {
         const duplicado = await db.getFirstAsync<{
             id: number;
             nuevo_remoto: number;
@@ -515,17 +545,15 @@ export async function vincularProfesorConRemoto(
             idLocal
         );
 
-        await db.execAsync('COMMIT');
-    } catch (error) {
-        await db.execAsync('ROLLBACK');
-        throw error;
-    }
+    });
+    });
 }
-export async function actualizarFotoPendiente(
+export function actualizarFotoPendiente(
   operacionId: number,
   profesorId: number,
   fotoUrl: string
 ) {
+  return ejecutarSQLite(async () => {
   const db = await dbPromise;
 
   await db.runAsync(
@@ -555,4 +583,5 @@ export async function actualizarFotoPendiente(
       operacionId
     );
   }
+  });
 }

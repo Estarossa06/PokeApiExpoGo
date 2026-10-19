@@ -55,7 +55,7 @@ interface ProfesoresContextType {
   docentesRecientes: Profesores[];
   intervaloMonitoreo: IntervaloMonitoreo;
   setIntervaloMonitoreo: (segundos: IntervaloMonitoreo) => void;
-  monitoreoActivo: boolean;
+  estadoMonitoreo: 'comprobando' | 'activo' | 'sin-conexion' | 'error';
   loading: boolean;
   error: string | null;
   buscarProfesor: (nombre: string) => Promise<void>;
@@ -196,7 +196,9 @@ export function ProfesoresProvider({
   const [intervaloMonitoreo, setIntervaloMonitoreoState] =
     useState<IntervaloMonitoreo>(10);
   const [intervaloCargado, setIntervaloCargado] = useState(false);
-  const [monitoreoActivo, setMonitoreoActivo] = useState(false);
+  const [estadoMonitoreo, setEstadoMonitoreo] = useState<
+    'comprobando' | 'activo' | 'sin-conexion' | 'error'
+  >('comprobando');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -243,7 +245,7 @@ export function ProfesoresProvider({
   // Consulta el listado completo de la nube y registra las inserciones nuevas.
   const consultarCambiosNube = useCallback(async () => {
     if (!(await hayInternet())) {
-      setMonitoreoActivo(false);
+      setEstadoMonitoreo('sin-conexion');
       return;
     }
 
@@ -251,6 +253,7 @@ export function ProfesoresProvider({
     // guardando el listado anterior en SQLite.
     if (sincronizando.current || consultandoCambios.current) return;
     consultandoCambios.current = true;
+    let etapa = 'descargar docentes de la nube';
 
     try {
       const respuesta = await fetch(API);
@@ -263,31 +266,37 @@ export function ProfesoresProvider({
 
       // También propaga las eliminaciones hechas directamente en la nube.
       // Las filas con operaciones offline pendientes se conservan.
+      etapa = 'eliminar docentes ausentes de SQLite';
       await eliminarProfesoresSincronizadosAusentes(
         remotos.map((remoto) => remoto.id)
       );
 
       for (const remoto of remotos) {
+        etapa = `guardar en SQLite el docente remoto ${remoto.id}`;
         await guardarDocenteDetectadoEnNube({
           ...datosServidor(remoto),
           id_remoto: remoto.id,
         });
       }
 
+      etapa = 'leer docentes recientes de SQLite';
       await cargarRecientes();
-      setMonitoreoActivo(true);
+      setEstadoMonitoreo('activo');
     } catch (e) {
-      setMonitoreoActivo(false);
-      console.warn('No se pudieron comprobar cambios en la nube:', e);
+      setEstadoMonitoreo('error');
+      console.warn(`No se pudieron comprobar cambios en la nube (${etapa}):`, e);
     } finally {
       consultandoCambios.current = false;
     }
   }, [cargarRecientes]);
 
   const sincronizar = useCallback(async () => {
-    if (sincronizando.current || !(await hayInternet())) {
-      return;
-    }
+    if (sincronizando.current || consultandoCambios.current) return;
+    if (!(await hayInternet())) return;
+
+    // `hayInternet()` yields control. A cloud poll can start while it waits,
+    // so recheck both guards before entering the SQLite synchronization path.
+    if (sincronizando.current || consultandoCambios.current) return;
 
     sincronizando.current = true;
 
@@ -499,9 +508,10 @@ export function ProfesoresProvider({
         estado.isConnected === true &&
         estado.isInternetReachable !== false
       ) {
+        setEstadoMonitoreo('comprobando');
         void sincronizarAlConectar();
       } else {
-        setMonitoreoActivo(false);
+        setEstadoMonitoreo('sin-conexion');
       }
     });
 
@@ -931,7 +941,7 @@ export function ProfesoresProvider({
         docentesRecientes,
         intervaloMonitoreo,
         setIntervaloMonitoreo,
-        monitoreoActivo,
+        estadoMonitoreo,
         loading,
         error,
         buscarProfesor,

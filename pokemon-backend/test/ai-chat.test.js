@@ -81,7 +81,7 @@ test('sends conversation to Gemini and returns only the generated text', async (
       assert.match(requestUrl, /models\/gemini-3\.5-flash-lite:generateContent$/);
       assert.equal(requestUrl.includes(apiKey), false);
       assert.equal(requestOptions.headers['x-goog-api-key'], apiKey);
-      assert.equal(requestOptions.signal, undefined);
+      assert.ok(requestOptions.signal instanceof AbortSignal);
       const providerRequest = JSON.parse(requestOptions.body);
       assert.deepEqual(providerRequest.generationConfig, {
         maxOutputTokens: 1024,
@@ -442,6 +442,119 @@ test('calls Gemini for missing attributes when the Pokemon exists in the databas
   );
 });
 
+test('resolves contextual follow-up questions only against the selected domain records', async () => {
+  const cases = [
+    {
+      domain: 'pokemon',
+      name: 'Bulbasaur',
+      messages: [
+        { role: 'user', content: '¿Qué datos tienes de Bulbasaur?' },
+        { role: 'assistant', content: 'Bulbasaur tiene altura 7 y peso 69.' },
+        { role: 'user', content: '¿Cuánto pesa?' },
+      ],
+      fetchData: undefined,
+      expectedData: /"weight":69/,
+    },
+    {
+      domain: 'dragonball',
+      name: 'Goku',
+      messages: [
+        { role: 'user', content: '¿Qué raza tiene Goku?' },
+        { role: 'assistant', content: 'Goku es Saiyan.' },
+        { role: 'user', content: '¿Y su género?' },
+      ],
+      fetchData: async () => new Response(
+        JSON.stringify([{ id: 1, name: 'Goku', race: 'Saiyan', gender: 'Male' }]),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      ),
+      expectedData: /"gender":"Male"/,
+    },
+  ];
+
+  for (const example of cases) {
+    let providerCalls = 0;
+    let providerRequest;
+    await withServer({
+      apiKey: 'test-key',
+      ...(example.fetchData ? { dataFetchImpl: example.fetchData } : {}),
+      fetchImpl: async (_url, options) => {
+        providerCalls += 1;
+        providerRequest = JSON.parse(options.body);
+        return new Response(
+          JSON.stringify({ candidates: [{ content: { parts: [{ text: `${example.name} contexto recibido.` }] } }] }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      },
+    }, async (url) => {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain: example.domain, messages: example.messages }),
+      });
+
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), { reply: `${example.name} contexto recibido.` });
+      assert.equal(providerCalls, 1);
+      assert.match(providerRequest.contents[0].parts[0].text, /Contexto previo/);
+      assert.match(providerRequest.contents[0].parts[0].text, /Usuario:.*Bulbasaur|Usuario:.*Goku/);
+      assert.match(providerRequest.contents[0].parts[0].text, example.expectedData);
+      assert.match(providerRequest.systemInstruction.parts[0].text, new RegExp(`dominio ${example.domain === 'pokemon' ? 'Pokémon' : 'Dragon Ball'}`));
+    });
+  }
+});
+
+test('does not reuse prior entity context when the current question names an unknown record', async () => {
+  let providerCalls = 0;
+  await withServer({
+    apiKey: 'test-key',
+    fetchImpl: async () => { providerCalls += 1; },
+  }, async (url) => {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        domain: 'pokemon',
+        messages: [
+          { role: 'user', content: '¿Qué datos tienes de Bulbasaur?' },
+          { role: 'assistant', content: 'Bulbasaur tiene altura 7 y peso 69.' },
+          { role: 'user', content: '¿Qué tipo tiene Ditto?' },
+        ],
+      }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.match((await response.json()).reply, /no encontré ese registro/i);
+    assert.equal(providerCalls, 0);
+  });
+});
+
+test('does not resume an older entity after an unknown entity interrupted the conversation', async () => {
+  let providerCalls = 0;
+  await withServer({
+    apiKey: 'test-key',
+    fetchImpl: async () => { providerCalls += 1; },
+  }, async (url) => {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        domain: 'pokemon',
+        messages: [
+          { role: 'user', content: '¿Qué datos tienes de Bulbasaur?' },
+          { role: 'assistant', content: 'Bulbasaur tiene altura 7 y peso 69.' },
+          { role: 'user', content: '¿Qué tipo tiene Ditto?' },
+          { role: 'assistant', content: 'No encontré ese registro.' },
+          { role: 'user', content: '¿Y su peso?' },
+        ],
+      }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.match((await response.json()).reply, /no encontré ese registro/i);
+    assert.equal(providerCalls, 0);
+  });
+});
+
 test('Dragon Ball requests use only the first-party Dragon Ball data service', async () => {
   let dataUrl;
   let providerRequest;
@@ -483,4 +596,203 @@ test('Dragon Ball requests use only the first-party Dragon Ball data service', a
       assert.match(providerRequest.systemInstruction.parts[0].text, /conocimiento general entrenado/i);
     }
   );
+});
+
+test('reports Dragon Ball service connection failures without calling an AI provider', async () => {
+  let providerCalls = 0;
+
+  await withServer({
+    apiKey: 'test-key',
+    dataFetchImpl: async () => { throw new TypeError('network unavailable'); },
+    fetchImpl: async () => { providerCalls += 1; },
+  }, async (url) => {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        domain: 'dragonball',
+        messages: [{ role: 'user', content: 'Háblame de Goku.' }],
+      }),
+    });
+
+    assert.equal(response.status, 503);
+    assert.match((await response.json()).error, /base de datos de Dragon Ball/);
+    assert.equal(providerCalls, 0);
+  });
+});
+
+test('rejects failed HTTP and malformed Dragon Ball responses before calling an AI provider', async (t) => {
+  const invalidResponses = [
+    ['non-success HTTP status', async () => new Response('unavailable', { status: 502 })],
+    ['non-array JSON payload', async () => new Response(JSON.stringify({ characters: [] }), { status: 200 })],
+    ['invalid JSON payload', async () => new Response('{', { status: 200 })],
+  ];
+
+  for (const [caseName, dataFetchImpl] of invalidResponses) {
+    await t.test(caseName, async () => {
+      let providerCalls = 0;
+      await withServer({
+        apiKey: 'test-key',
+        dataFetchImpl,
+        fetchImpl: async () => { providerCalls += 1; },
+      }, async (url) => {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            domain: 'dragonball',
+            messages: [{ role: 'user', content: 'Háblame de Goku.' }],
+          }),
+        });
+
+        assert.equal(response.status, 503);
+        assert.match((await response.json()).error, /base de datos de Dragon Ball/);
+        assert.equal(providerCalls, 0);
+      });
+    });
+  }
+});
+
+test('does not call an AI provider when the Dragon Ball service has no matching character', async () => {
+  let providerCalls = 0;
+
+  await withServer({
+    apiKey: 'test-key',
+    dataFetchImpl: async () => new Response(JSON.stringify([
+      { id: 1, name: 'Goku', race: 'Saiyan' },
+    ]), { status: 200 }),
+    fetchImpl: async () => { providerCalls += 1; },
+  }, async (url) => {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        domain: 'dragonball',
+        messages: [{ role: 'user', content: 'Háblame de Vegeta.' }],
+      }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.match((await response.json()).reply, /no encontré ese registro/i);
+    assert.equal(providerCalls, 0);
+  });
+});
+
+test('routes all providers with their own credentials and compatible response parsing', async () => {
+  for (const provider of ['gemini', 'openai', 'groq']) {
+    let calledUrl;
+    let calledOptions;
+    await withServer({
+      apiKeys: { gemini: 'g-key', openai: 'o-key', groq: 'groq-key' },
+      fetchImpl: async (url, options) => {
+        calledUrl = url;
+        calledOptions = options;
+        const body = provider === 'gemini'
+          ? { candidates: [{ content: { parts: [{ text: 'mock reply' }] } }] }
+          : { choices: [{ message: { content: 'mock reply' } }] };
+        return new Response(JSON.stringify(body), { status:  200 });
+      },
+    }, async (url) => {
+      const response = await fetch(url, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain: 'pokemon', provider, timeout: 40, messages: [{ role: 'user', content: 'Bulbasaur?' }] }),
+      });
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), { reply: 'mock reply' });
+      if (provider === 'gemini') {
+        assert.match(calledUrl, /generativelanguage.googleapis.com/);
+        assert.equal(calledOptions.headers['x-goog-api-key'], 'g-key');
+      } else {
+        assert.match(calledUrl, provider === 'openai' ? /api.openai.com/ : /api.groq.com\/openai\/v1\/chat\/completions/);
+        assert.equal(calledOptions.headers.Authorization, `Bearer ${provider === 'openai' ? 'o-key' : 'groq-key'}`);
+        if (provider === 'groq') {
+          assert.equal(JSON.parse(calledOptions.body).model, 'llama-3.1-8b-instant');
+        }
+      }
+      assert.ok(calledOptions.signal instanceof AbortSignal);
+    });
+  }
+});
+
+test('accepts all four timeout values and rejects invalid provider or timeout', async () => {
+  for (const timeout of [20, 40, 80, 160]) {
+    let signal;
+    let timeoutDelay;
+    await withServer({
+      apiKey: 'g-key',
+      setTimeoutImpl: (callback, delay) => { timeoutDelay = delay; return globalThis.setTimeout(callback, delay); },
+      fetchImpl: async (_url, options) => {
+        signal = options.signal;
+        return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'ok' }] } }] }), { status: 200 });
+      },
+    }, async (url) => {
+      const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain: 'pokemon', timeout, messages: [{ role: 'user', content: 'Bulbasaur?' }] }) });
+      assert.equal(response.status, 200);
+      assert.ok(signal instanceof AbortSignal);
+      assert.equal(timeoutDelay, timeout * 1000);
+    });
+  }
+  for (const invalid of [{ provider: 'unknown', timeout: 40 }, { provider: 'gemini', timeout: 30 }]) {
+    await withServer({ apiKey: 'g-key', fetchImpl: async () => { throw new Error('must not call provider'); } }, async (url) => {
+      const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain: 'pokemon', ...invalid, messages: [{ role: 'user', content: 'Bulbasaur?' }] }) });
+      assert.equal(response.status, 400);
+    });
+  }
+});
+
+test('returns missing-key error for the selected provider without calling it', async () => {
+  let calls = 0;
+  await withServer({ apiKeys: { gemini: 'g-key' }, fetchImpl: async () => { calls += 1; } }, async (url) => {
+    const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain: 'pokemon', provider: 'groq', messages: [{ role: 'user', content: 'Bulbasaur?' }] }) });
+    assert.equal(response.status, 503);
+    assert.equal(calls, 0);
+  });
+});
+
+test('aborts a provider request when its selected timeout expires', async () => {
+  let requestedDelay;
+  await withServer({
+    apiKey: 'g-key',
+    setTimeoutImpl: (callback, delay) => { requestedDelay = delay; callback(); return 1; },
+    clearTimeoutImpl: () => {},
+    fetchImpl: async (_url, options) => {
+      assert.equal(requestedDelay, 40_000);
+      assert.equal(options.signal.aborted, true);
+      const error = new Error('aborted');
+      error.name = 'AbortError';
+      throw error;
+    },
+  }, async (url) => {
+    const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain: 'pokemon', timeout: 40, messages: [{ role: 'user', content: 'Bulbasaur?' }] }) });
+    assert.equal(response.status, 504);
+  });
+});
+
+test('keeps the provider timeout active while reading the response body and maps expiry to 504', async () => {
+  let expireProvider;
+  let cleared = false;
+  await withServer({
+    apiKey: 'test-key',
+    setTimeoutImpl: (callback, delay) => { assert.equal(delay, 40_000); expireProvider = callback; return 9; },
+    clearTimeoutImpl: () => { cleared = true; },
+    fetchImpl: async (_url, options) => ({
+      status: 200,
+      ok: true,
+      json: async () => {
+        assert.equal(cleared, false, 'provider timer must stay active while parsing JSON');
+        expireProvider();
+        assert.equal(options.signal.aborted, true);
+        const error = new Error('body aborted');
+        error.name = 'AbortError';
+        throw error;
+      },
+    }),
+  }, async (url) => {
+    const response = await fetch(url, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ domain: 'pokemon', timeout: 40, messages: [{ role: 'user', content: 'Bulbasaur?' }] }),
+    });
+    assert.equal(response.status, 504);
+    assert.equal(cleared, true);
+  });
 });

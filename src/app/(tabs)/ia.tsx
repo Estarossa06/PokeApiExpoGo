@@ -1,6 +1,8 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Gemini, Groq, OpenAI } from '@lobehub/icons-rn';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useRef, useState } from 'react';
+import Storage from 'expo-sqlite/kv-store';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -16,6 +18,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   sendChatMessage,
   type ChatDomain,
+  type AiProvider,
+  type AiTimeout,
   type ChatTurn,
 } from '../../services/ai';
 
@@ -25,13 +29,55 @@ interface Message extends ChatTurn {
 }
 
 const MAX_MESSAGE_LENGTH = 4000;
+const TIMEOUT_STORAGE_KEY = 'ia.timeout.seconds';
+const PROVIDER_ICONS = {
+  gemini: Gemini,
+  openai: OpenAI,
+  groq: Groq,
+} satisfies Record<AiProvider, React.ComponentType<{ size?: number; color?: string }>>;
 
 export default function IaScreen() {
   const [domain, setDomain] = useState<ChatDomain>('pokemon');
+  const [provider, setProvider] = useState<AiProvider>('gemini');
+  const [timeout, setTimeoutValue] = useState<AiTimeout>(40);
+  const [timeoutLoaded, setTimeoutLoaded] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState('');
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
+  const timeoutPersistenceQueue = useRef(Promise.resolve());
+
+  useEffect(() => {
+    let active = true;
+
+    Storage.getItem(TIMEOUT_STORAGE_KEY)
+      .then((savedTimeout) => {
+        if (!active) return;
+        const value = Number(savedTimeout);
+        if (value === 20 || value === 40 || value === 80 || value === 160) {
+          setTimeoutValue(value);
+        }
+      })
+      .catch((error) => {
+        console.warn('No se pudo cargar el tiempo de espera guardado:', error);
+      })
+      .finally(() => {
+        if (active) setTimeoutLoaded(true);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const selectTimeout = (value: AiTimeout) => {
+    setTimeoutValue(value);
+    timeoutPersistenceQueue.current = timeoutPersistenceQueue.current
+      .then(() => Storage.setItem(TIMEOUT_STORAGE_KEY, String(value)))
+      .catch((error) => {
+        console.warn('No se pudo guardar el tiempo de espera:', error);
+      });
+  };
 
   const send = async () => {
     const question = draft.trim();
@@ -52,7 +98,7 @@ export default function IaScreen() {
         .filter((message) => !message.failed)
         .slice(-20)
         .map(({ role, content }) => ({ role, content }));
-      const reply = await sendChatMessage(conversation, domain);
+      const reply = await sendChatMessage(conversation, domain, provider, timeout);
       setMessages((current) => [
         ...current,
         { id: `${Date.now()}-assistant`, role: 'assistant', content: reply },
@@ -140,6 +186,35 @@ export default function IaScreen() {
               Dragon Ball
             </Text>
           </Pressable>
+        </View>
+
+        <View style={styles.settingsRow}>
+          <Text style={styles.settingLabel}>Proveedor</Text>
+          {(['gemini', 'openai', 'groq'] as const).map((value) => {
+            const ProviderIcon = PROVIDER_ICONS[value];
+            return <Pressable key={value} disabled={loading} onPress={() => setProvider(value)}
+              accessibilityLabel={value === 'gemini' ? 'Gemini' : value === 'openai' ? 'OpenAI' : 'Groq'}
+              accessibilityRole="button" accessibilityState={{ selected: provider === value }}
+              style={[styles.settingOption, styles.providerOption, provider === value && styles.providerOptionActive]}>
+              <ProviderIcon
+                size={20}
+                color="#111111"
+              />
+              {provider === value && (
+                <MaterialCommunityIcons name="check-circle" size={13} color="#7D1D2A" style={styles.providerSelectedMark} />
+              )}
+            </Pressable>
+          })}
+        </View>
+        <View style={styles.settingsRow}>
+          <Text style={styles.settingLabel}>Tiempo</Text>
+          {([20, 40, 80, 160] as const).map((value) => (
+            <Pressable key={value} disabled={loading || !timeoutLoaded} onPress={() => selectTimeout(value)}
+              accessibilityRole="button" accessibilityState={{ selected: timeout === value }}
+              style={[styles.settingOption, timeout === value && styles.settingOptionActive]}>
+              <Text style={[styles.settingText, timeout === value && styles.settingTextActive]}>{value}s</Text>
+            </Pressable>
+          ))}
         </View>
 
         <ScrollView
@@ -336,6 +411,15 @@ const styles = StyleSheet.create({
   domainOptionTextActive: {
     color: '#7D1D2A',
   },
+  settingsRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 6 },
+  settingLabel: { width: 74, flexShrink: 0, color: '#75686B', fontSize: 12, fontWeight: '600' },
+  settingOption: { flex: 1, minHeight: 30, alignItems: 'center', justifyContent: 'center', borderRadius: 9, backgroundColor: '#EFE3E5' },
+  settingOptionActive: { backgroundColor: '#7D1D2A' },
+  providerOption: { width: 40, flex: 0, minHeight: 34, borderWidth: 1, borderColor: '#D6C9CC' },
+  providerOptionActive: { backgroundColor: '#FFFFFF', borderWidth: 2, borderColor: '#7D1D2A' },
+  providerSelectedMark: { position: 'absolute', right: 3, top: 2 },
+  settingText: { color: '#75686B', fontSize: 12, fontWeight: '600' },
+  settingTextActive: { color: '#FFFFFF' },
   messages: {
     flex: 1,
   },

@@ -13,7 +13,7 @@ export default function ProfesoresScreen() {
     docentesRecientes,
     intervaloMonitoreo,
     setIntervaloMonitoreo,
-    monitoreoActivo,
+    estadoMonitoreo,
     loading,
     error,
     buscarProfesor,
@@ -735,9 +735,9 @@ export default function ProfesoresScreen() {
           <View style={styles.recentSection}>
             <View style={styles.recentHeader}>
               <Text style={styles.recentTitle}>Docentes recientes</Text>
-              <View style={[styles.statusBadge, monitoreoActivo ? styles.statusOnline : styles.statusOffline]}>
+              <View style={[styles.statusBadge, estadoMonitoreo === 'activo' ? styles.statusOnline : estadoMonitoreo === 'error' ? styles.statusError : styles.statusOffline]}>
                 <Text style={styles.statusBadgeText}>
-                  {monitoreoActivo ? 'MONITOREANDO' : 'SIN CONEXIÓN'}
+                  {estadoMonitoreo === 'activo' ? 'MONITOREANDO' : estadoMonitoreo === 'sin-conexion' ? 'SIN CONEXIÓN' : estadoMonitoreo === 'error' ? 'ERROR AL ACTUALIZAR' : 'COMPROBANDO'}
                 </Text>
               </View>
             </View>
@@ -1059,6 +1059,9 @@ export default function ProfesoresScreen() {
     },
     statusOffline: {
       backgroundColor: '#F3E7E9',
+    },
+    statusError: {
+      backgroundColor: '#FFF0D6',
     },
     statusBadgeText: {
       fontSize: 9,

@@ -1,5 +1,7 @@
 export type ChatRole = 'user' | 'assistant';
 export type ChatDomain = 'pokemon' | 'dragonball';
+export type AiProvider = 'gemini' | 'openai' | 'groq';
+export type AiTimeout = 20 | 40 | 80 | 160;
 
 export interface ChatTurn {
   role: ChatRole;
@@ -17,15 +19,20 @@ const API_BASE_URL =
 
 export async function sendChatMessage(
   messages: ChatTurn[],
-  domain: ChatDomain
+  domain: ChatDomain,
+  provider: AiProvider = 'gemini',
+  timeout: AiTimeout = 40
 ): Promise<string> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout * 1000);
   try {
     const response = await fetch(
       `${API_BASE_URL.replace(/\/+$/, '')}/api/ai/database-chat`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ domain, messages }),
+        body: JSON.stringify({ domain, messages, provider, timeout }),
+        signal: controller.signal,
       }
     );
     const result: ChatResponse | null = await response
@@ -53,5 +60,7 @@ export async function sendChatMessage(
       throw new Error('No se pudo conectar con el servicio de IA.');
     }
     throw error;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
