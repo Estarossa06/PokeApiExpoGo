@@ -39,10 +39,10 @@ export default function TabLayout() {
           options={{
             title: 'Inicio',
             headerShown: false,
-            tabBarIcon: ({ color, focused }) => (
+            tabBarIcon: ({ focused }) => (
               <Ionicons
                 name={focused ? 'image' : 'image'}
-                color={color}
+                color={focused ? '#4F1720' : '#000000'}
                 size={24}
               />
             ),
@@ -54,10 +54,10 @@ export default function TabLayout() {
           options={{
             title: 'Info Pokémon',
             headerShown: false,
-            tabBarIcon: ({ color, focused }) => (
+            tabBarIcon: ({ focused }) => (
               <Ionicons
                 name={focused ? 'list' : 'list'}
-                color={color}
+                color={focused ? '#4F1720' : '#000000'}
                 size={24}
               />
             ),
@@ -69,11 +69,11 @@ export default function TabLayout() {
           options={{
             title: 'Character',
             headerShown: false,
-            tabBarIcon: ({ color }) => (
+            tabBarIcon: ({ focused }) => (
               <Ionicons
                 name="person-circle-outline"
                 size={28}
-                color={color}
+                color={focused ? '#4F1720' : '#000000'}
               />
             ),
           }}
@@ -84,11 +84,11 @@ export default function TabLayout() {
           options={{
             title: 'Info Dragon Ball',
             headerShown: false,
-            tabBarIcon: ({ color }) => (
+            tabBarIcon: ({ focused }) => (
               <Ionicons
                 name="information-circle-outline"
                 size={28}
-                color={color}
+                color={focused ? '#4F1720' : '#000000'}
               />
             ),
           }}
@@ -99,11 +99,11 @@ export default function TabLayout() {
           options={{
             title: 'Profesores',
             headerShown: false,
-            tabBarIcon: ({ color }) => (
+            tabBarIcon: ({ focused }) => (
               <Ionicons
                 name="people-outline"
                 size={28}
-                color={color}
+                color={focused ? '#4F1720' : '#000000'}
               />
             ),
           }}
@@ -114,10 +114,10 @@ export default function TabLayout() {
           options={{
             title: 'IA',
             headerShown: false,
-            tabBarIcon: ({ color, size }) => (
+            tabBarIcon: ({ focused, size }) => (
               <MaterialCommunityIcons
                 name="robot-outline"
-                color={color}
+                color={focused ? '#4F1720' : '#000000'}
                 size={size ?? 24}
               />
             ),

@@ -6,8 +6,10 @@ import {
   TabTriggerSlotProps,
   TabListProps,
 } from 'expo-router/ui';
+import { forwardRef } from 'react';
 import { SymbolView } from 'expo-symbols';
 import { Pressable, useColorScheme, View, StyleSheet } from 'react-native';
+import type { ViewInstance } from 'react-native';
 
 import { ExternalLink } from './external-link';
 import { ThemedText } from './themed-text';
@@ -15,7 +17,6 @@ import { ThemedView } from './themed-view';
 
 import { Colors, MaxContentWidth, Spacing } from '@/constants/theme';
 
-import { Ref } from 'react';
 
 export default function AppTabs() {
   return (
@@ -33,13 +34,10 @@ export default function AppTabs() {
 }
 
 
-type TabButtonProps = TabTriggerSlotProps & {
-  ref: Ref<View>;
-};
-
-export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps) {
-  return (
-    <Pressable {...props} style={({ pressed }) => pressed && styles.pressed}>
+export const TabButton = forwardRef<ViewInstance, Omit<TabTriggerSlotProps, 'ref'>>(
+  function TabButton({ children, isFocused, ...props }, ref) {
+    return (
+      <Pressable {...props} ref={ref} style={({ pressed }) => pressed && styles.pressed}>
       <ThemedView
         type={isFocused ? 'backgroundSelected' : 'backgroundElement'}
         style={styles.tabButtonView}>
@@ -47,13 +45,14 @@ export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps
           {children}
         </ThemedText>
       </ThemedView>
-    </Pressable>
-  );
-}
+      </Pressable>
+    );
+  }
+);
 
 export function CustomTabList(props: TabListProps) {
   const scheme = useColorScheme();
-  const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
+  const colors = Colors[scheme === 'dark' ? 'dark' : 'light'];
 
   return (
     <View {...props} style={styles.tabListContainer}>

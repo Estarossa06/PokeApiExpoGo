@@ -14,6 +14,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import type { ScrollViewInstance } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   sendChatMessage,
@@ -23,20 +24,29 @@ import {
   type ChatTurn,
 } from '../../services/ai';
 
+// La pantalla conserva un identificador local y marca los mensajes de error
+// para poder mostrarlos, pero no los vuelve a enviar como parte del historial.
 interface Message extends ChatTurn {
   id: string;
   failed?: boolean;
 }
 
+// El límite del campo coincide con el máximo que acepta el backend por mensaje.
 const MAX_MESSAGE_LENGTH = 4000;
 const TIMEOUT_STORAGE_KEY = 'ia.timeout.seconds';
+// Relaciona cada valor enviado al backend con el icono que se muestra en pantalla.
 const PROVIDER_ICONS = {
   gemini: Gemini,
   openai: OpenAI,
   groq: Groq,
 } satisfies Record<AiProvider, React.ComponentType<{ size?: number; color?: string }>>;
 
+/**
+ * Pantalla del chat: mantiene las preferencias y la conversación, presenta los
+ * controles y delega las solicitudes HTTP en `sendChatMessage`.
+ */
 export default function IaScreen() {
+  // Cada estado controla una parte del formulario o del historial visible.
   const [domain, setDomain] = useState<ChatDomain>('pokemon');
   const [provider, setProvider] = useState<AiProvider>('gemini');
   const [timeout, setTimeoutValue] = useState<AiTimeout>(40);
@@ -44,9 +54,11 @@ export default function IaScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState('');
   const [loading, setLoading] = useState(false);
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const timeoutPersistenceQueue = useRef(Promise.resolve());
 
+  // Recupera el tiempo elegido anteriormente desde el almacén local de SQLite.
+  // Si no existe o no pertenece a las opciones válidas, se conserva el valor inicial (40).
   useEffect(() => {
     let active = true;
 
@@ -70,8 +82,10 @@ export default function IaScreen() {
     };
   }, []);
 
+  /** Actualiza el tiempo de inmediato y guarda la preferencia para la próxima apertura. */
   const selectTimeout = (value: AiTimeout) => {
     setTimeoutValue(value);
+    // La cola evita que escrituras rápidas terminen guardadas en un orden distinto al de selección.
     timeoutPersistenceQueue.current = timeoutPersistenceQueue.current
       .then(() => Storage.setItem(TIMEOUT_STORAGE_KEY, String(value)))
       .catch((error) => {
@@ -79,10 +93,12 @@ export default function IaScreen() {
       });
   };
 
+  /** Valida el borrador, lo añade al chat y coordina una solicitud al servicio de IA. */
   const send = async () => {
     const question = draft.trim();
     if (!question || loading) return;
 
+    // Primero se refleja la pregunta en la interfaz y se bloquean nuevos envíos mientras responde.
     const userMessage: Message = {
       id: `${Date.now()}-user`,
       role: 'user',
@@ -94,16 +110,19 @@ export default function IaScreen() {
     setLoading(true);
 
     try {
+      // El backend acepta hasta 20 turnos/mensajes: se omiten errores locales y se conserva lo más reciente.
       const conversation = nextMessages
         .filter((message) => !message.failed)
         .slice(-20)
         .map(({ role, content }) => ({ role, content }));
+      // El dominio, proveedor y tiempo seleccionados viajan junto con el historial.
       const reply = await sendChatMessage(conversation, domain, provider, timeout);
       setMessages((current) => [
         ...current,
         { id: `${Date.now()}-assistant`, role: 'assistant', content: reply },
       ]);
     } catch (error) {
+      // Los errores del servicio se agregan como mensajes visibles y se excluyen del próximo historial.
       const message =
         error instanceof Error
           ? error.message
@@ -122,6 +141,7 @@ export default function IaScreen() {
     }
   };
 
+  /** Cambiar de base de datos inicia una conversación limpia para ese dominio. */
   const selectDomain = (nextDomain: ChatDomain) => {
     if (loading || nextDomain === domain) return;
     setDomain(nextDomain);
@@ -147,6 +167,7 @@ export default function IaScreen() {
       </SafeAreaView>
 
       <View style={styles.chatColumn}>
+        {/* El dominio determina qué conjunto de registros consultará el backend. */}
         <View style={styles.domainSwitch} accessibilityRole="tablist">
           <Pressable
             accessibilityRole="tab"
@@ -188,24 +209,45 @@ export default function IaScreen() {
           </Pressable>
         </View>
 
-        <View style={styles.settingsRow}>
-          <Text style={styles.settingLabel}>Proveedor</Text>
-          {(['gemini', 'openai', 'groq'] as const).map((value) => {
-            const ProviderIcon = PROVIDER_ICONS[value];
-            return <Pressable key={value} disabled={loading} onPress={() => setProvider(value)}
-              accessibilityLabel={value === 'gemini' ? 'Gemini' : value === 'openai' ? 'OpenAI' : 'Groq'}
-              accessibilityRole="button" accessibilityState={{ selected: provider === value }}
-              style={[styles.settingOption, styles.providerOption, provider === value && styles.providerOptionActive]}>
-              <ProviderIcon
-                size={20}
-                color="#111111"
-              />
-              {provider === value && (
-                <MaterialCommunityIcons name="check-circle" size={13} color="#7D1D2A" style={styles.providerSelectedMark} />
-              )}
-            </Pressable>
-          })}
+        {/* `provider` usa los mismos valores permitidos por el backend: gemini, openai o groq. */}
+        <View style={styles.providerSettingsRow}>
+          <Text style={[styles.settingLabel, styles.providerSettingLabel]}>Proveedor</Text>
+          <View style={styles.providerOptions}>
+            {(['gemini', 'openai', 'groq'] as const).map((value) => {
+              const ProviderIcon = PROVIDER_ICONS[value];
+              const label = value === 'openai'
+                ? 'OpenAI'
+                : value.charAt(0).toUpperCase() + value.slice(1);
+
+              return (
+                <Pressable
+                  key={value}
+                  disabled={loading}
+                  onPress={() => setProvider(value)}
+                  accessibilityLabel={label}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: provider === value }}
+                  style={[
+                    styles.providerOption,
+                    provider === value && styles.providerOptionActive,
+                  ]}
+                >
+                  <ProviderIcon size={18} color="#111111" />
+                  <Text style={styles.providerLabel}>{label}</Text>
+                  {provider === value && (
+                    <MaterialCommunityIcons
+                      name="check-circle"
+                      size={13}
+                      color="#7D1D2A"
+                      style={styles.providerSelectedMark}
+                    />
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
+        {/* Opciones en segundos (20, 40, 80 o 160); se deshabilitan hasta recuperar la preferencia guardada. */}
         <View style={styles.settingsRow}>
           <Text style={styles.settingLabel}>Tiempo</Text>
           {([20, 40, 80, 160] as const).map((value) => (
@@ -217,6 +259,7 @@ export default function IaScreen() {
           ))}
         </View>
 
+        {/* El historial incluye las preguntas, respuestas y errores mostrados en el chat. */}
         <ScrollView
           ref={scrollRef}
           style={styles.messages}
@@ -296,6 +339,7 @@ export default function IaScreen() {
           )}
         </ScrollView>
 
+        {/* `draft` se actualiza al escribir; tanto Enter como el botón llaman a `send`. */}
         <View style={styles.composer}>
           <TextInput
             accessibilityLabel="Pregunta para el asistente"
@@ -415,9 +459,13 @@ const styles = StyleSheet.create({
   settingLabel: { width: 74, flexShrink: 0, color: '#75686B', fontSize: 12, fontWeight: '600' },
   settingOption: { flex: 1, minHeight: 30, alignItems: 'center', justifyContent: 'center', borderRadius: 9, backgroundColor: '#EFE3E5' },
   settingOptionActive: { backgroundColor: '#7D1D2A' },
-  providerOption: { width: 40, flex: 0, minHeight: 34, borderWidth: 1, borderColor: '#D6C9CC' },
+  providerSettingsRow: { marginBottom: 6 },
+  providerSettingLabel: { width: 'auto', marginBottom: 5 },
+  providerOptions: { flexDirection: 'row', gap: 6 },
+  providerOption: { flex: 1, minWidth: 0, minHeight: 44, flexDirection: 'row', gap: 4, paddingHorizontal: 6, alignItems: 'center', justifyContent: 'center', borderRadius: 9, borderWidth: 1, borderColor: '#D6C9CC', backgroundColor: '#EFE3E5' },
   providerOptionActive: { backgroundColor: '#FFFFFF', borderWidth: 2, borderColor: '#7D1D2A' },
-  providerSelectedMark: { position: 'absolute', right: 3, top: 2 },
+  providerLabel: { color: '#111111', fontSize: 12, fontWeight: '600', flexShrink: 1 },
+  providerSelectedMark: { marginLeft: 'auto' },
   settingText: { color: '#75686B', fontSize: 12, fontWeight: '600' },
   settingTextActive: { color: '#FFFFFF' },
   messages: {
